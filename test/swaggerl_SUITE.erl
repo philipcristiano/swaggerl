@@ -16,7 +16,8 @@ all() -> [{group, test_swaggerl}].
 groups() -> [{test_swaggerl,
              [aa_load_test,
               ba_simple_get_operation,
-              bb_get_operation_with_http_options
+              bb_get_operation_with_http_options,
+              ca_list_operations
               ]}].
 
 
@@ -66,6 +67,11 @@ bb_get_operation_with_http_options(Config) ->
     ?assertEqual(#{}, Resp),
     ok.
 
+ca_list_operations(Config) ->
+    Conf = load_pet_fixture(Config),
+    Resp = ?MUT:operations(Conf),
+    ?assertEqual(pet_operations(), Resp),
+    ok.
 
 load_pet_fixture(Config) ->
     load_pet_fixture(Config, []).
@@ -73,3 +79,27 @@ load_pet_fixture(Config) ->
 load_pet_fixture(Config, Options) ->
     PetSwagger = ?config(pet_swagger, Config),
     ?MUT:load(PetSwagger, Options).
+
+
+pet_operations() ->
+    ["addPet",
+     "createUser",
+     "createUsersWithArrayInput",
+     "createUsersWithListInput",
+     "deleteOrder",
+     "deletePet",
+     "deleteUser",
+     "findPetsByStatus",
+     "findPetsByTags",
+     "getInventory",
+     "getOrderById",
+     "getPetById",
+     "getUserByName",
+     "loginUser",
+     "logoutUser",
+     "placeOrder",
+     "updatePet",
+     "updatePetWithForm",
+     "updateUser",
+     "uploadFile"
+    ].

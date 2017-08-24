@@ -5,6 +5,7 @@
 -export([load/1,
          load/2,
          op/3,
+         operations/1,
          set_server/2
          ]).
 
@@ -43,6 +44,11 @@ op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params) -
     Data = jsx:decode(Body, [return_maps]),
     lager:debug("Found Data ~p", [Data]),
     Data.
+
+operations(#state{ops_map=OpsMap}) ->
+    Keys = maps:keys(OpsMap),
+    ListKeys = list_of_bins_to_list_of_lists(Keys),
+    ListKeys.
 
 set_server(State=#state{}, Server) ->
     State#state{server=Server}.
@@ -105,3 +111,8 @@ replace_path(Path, [{ParamK, ParamV}|Params]) when is_binary(ParamK) ->
     ReplaceBin = << <<"{">>/binary, ParamK/binary, <<"}">>/binary >>,
     NewPath = binary:replace(Path, ReplaceBin, ParamV),
     replace_path(NewPath, Params).
+
+list_of_bins_to_list_of_lists([]) ->
+    [];
+list_of_bins_to_list_of_lists([H|T]) ->
+    [binary:bin_to_list(H) | list_of_bins_to_list_of_lists(T)].
