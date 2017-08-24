@@ -1,0 +1,8 @@
+/.erlang.mk
+/deps
+/ebin
+/log
+/logs
+*.beam
+
+swaggerl.d
