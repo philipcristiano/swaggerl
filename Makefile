@@ -3,6 +3,7 @@ PROJECT_DESCRIPTION = New project
 PROJECT_VERSION = 0.1.0
 
 DEPS = lager jsx
+LOCAL_DEPS = inets ssl
 TEST_DEPS = meck
 
 SHELL_OPTS = -config sys
