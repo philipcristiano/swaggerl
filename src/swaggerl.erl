@@ -37,9 +37,10 @@ op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params) -
     ReplacedPath = binary:bin_to_list(replace_path(Path, Params)),
     FullPath = Server ++ ReplacedPath,
     AMethod = method(Method),
-    lager:debug("Found op ~p", [Op]),
-    {ok, Result} = httpc:request(AMethod, {FullPath, []}, HTTPOptions, [{body_format, binary}]),
-    {_Status, _Headers, Body} = Result,
+    lager:debug("Found op ~p", [{Op, FullPath}]),
+    {ok, _Code, _Headers, ReqRef} = hackney:request(AMethod, FullPath, [], <<>>, HTTPOptions),
+    lager:debug("Ref ~p", [ReqRef]),
+    {ok, Body} = hackney:body(ReqRef),
     lager:debug("Found Body ~p", [Body]),
     Data = jsx:decode(Body, [return_maps]),
     lager:debug("Found Data ~p", [Data]),
@@ -61,8 +62,8 @@ load_file(Path) ->
 
 load_http(Path, HTTPOptions) ->
     io:format("Options ~p~n", [HTTPOptions]),
-    {ok, Result} = httpc:request(get, {Path, []}, HTTPOptions, [{body_format, binary}]),
-    {_Status, _Headers, Body} = Result,
+    {ok, _Code, _Headers, ReqRef} = hackney:request(get, Path, [], <<>>, HTTPOptions),
+    {ok, Body} = hackney:body(ReqRef),
     Body.
 
 decode_data(Data, State=#state{}) ->

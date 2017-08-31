@@ -24,14 +24,15 @@ groups() -> [{test_swaggerl,
 
 init_per_testcase(_, Config) ->
     ok = lager_common_test_backend:bounce(debug),
-    ok = meck:new(httpc, []),
+    ok = meck:new(hackney, []),
     DataDir = ?config(data_dir, Config),
     PetSwagger = DataDir ++ "swagger-pets.json",
+    ok = meck:expect(hackney, body, fun(PL) -> proplists:get_value(body, PL) end),
 
     [{pet_swagger, PetSwagger} | Config].
 
 end_per_testcase(_, Config) ->
-    meck:unload(httpc),
+    meck:unload(hackney),
     Config.
 
 aa_load_test(Config) ->
@@ -41,29 +42,30 @@ aa_load_test(Config) ->
 
 ba_simple_get_operation(Config) ->
     Conf0 = load_pet_fixture(Config),
-    Result = {"Status", "Headers", jsx:encode(#{})},
-    ok = meck:expect(httpc, request, fun(get, {"http://localhost/pet/0", []}, [], [{body_format, binary}]) -> {ok, Result} end),
+    Result = hackney_response([{body, {ok, jsx:encode(#{})}}]),
+    ok = meck:expect(hackney, request, fun(get, "http://localhost/pet/0", [], <<>>, []) -> Result end),
 
     Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
     Resp = ?MUT:op(Conf1, "getPetById", [{"petId", 0}]),
-    true = meck:validate(httpc),
+    true = meck:validate(hackney),
     ?assertEqual(#{}, Resp),
     ok.
 
 bb_get_operation_with_http_options(Config) ->
     HTTPOptions = make_ref(),
     Conf0 = load_pet_fixture(Config, HTTPOptions),
-    Result = {"Status", "Headers", jsx:encode(#{})},
-    ok = meck:expect(httpc, request, fun(get,
-                                         {"http://localhost/pet/0", []},
-                                        FunHTTPOptions,
-                                        [{body_format, binary}]) ->
+    Result = hackney_response([{body, {ok, jsx:encode(#{})}}]),
+    ok = meck:expect(hackney, request, fun(get,
+                                           "http://localhost/pet/0",
+                                           [],
+                                           <<>>,
+                                           FunHTTPOptions) ->
         ?assertEqual(HTTPOptions, FunHTTPOptions),
-        {ok, Result} end),
+        Result end),
 
     Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
     Resp = ?MUT:op(Conf1, "getPetById", [{"petId", 0}]),
-    true = meck:validate(httpc),
+    true = meck:validate(hackney),
     ?assertEqual(#{}, Resp),
     ok.
 
@@ -72,6 +74,9 @@ ca_list_operations(Config) ->
     Resp = ?MUT:operations(Conf),
     ?assertEqual(pet_operations(), Resp),
     ok.
+
+hackney_response(Result) ->
+    {ok, code, headers, Result}.
 
 load_pet_fixture(Config) ->
     load_pet_fixture(Config, []).
