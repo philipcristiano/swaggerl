@@ -5,6 +5,7 @@
 -export([load/1,
          load/2,
          op/3,
+         async_op/3,
          operations/1,
          set_server/2
          ]).
@@ -33,18 +34,29 @@ op(S=#state{}, Op, Params) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
     op(S, BOp, Params);
 op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params) ->
-    {Path, Method, _OpSpec} = maps:get(Op, OpsMap),
-    ReplacedPath = binary:bin_to_list(replace_path(Path, Params)),
-    FullPath = Server ++ ReplacedPath,
-    AMethod = method(Method),
-    lager:debug("Found op ~p", [{Op, FullPath}]),
-    {ok, _Code, _Headers, ReqRef} = hackney:request(AMethod, FullPath, [], <<>>, HTTPOptions),
+    {Method, Path} = request_details(Server, Op, OpsMap, Params),
+    lager:debug("Found op ~p", [{Op, Path}]),
+    {ok, _Code, _Headers, ReqRef} = hackney:request(Method, Path, [], <<>>, HTTPOptions),
     lager:debug("Ref ~p", [ReqRef]),
     {ok, Body} = hackney:body(ReqRef),
     lager:debug("Found Body ~p", [Body]),
     Data = jsx:decode(Body, [return_maps]),
     lager:debug("Found Data ~p", [Data]),
     Data.
+
+async_op(S=#state{}, Op, Params) when is_list(Op)->
+    BOp = binary:list_to_bin(Op),
+    async_op(S, BOp, Params);
+async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params) ->
+    {Method, Path} = request_details(Server, Op, OpsMap, Params),
+    lager:debug("Found op ~p", [{Op, self()}]),
+    Options = [{recv_timeout, infinity},  async] ++ HTTPOptions,
+    {ok, RequestId} = hackney:request(Method, Path, [], <<>>, Options),
+    lager:debug("RequestId ~p", [RequestId]),
+    Callback = fun(Msg) ->
+        async_read(S, RequestId, Msg) end,
+
+    Callback.
 
 operations(#state{ops_map=OpsMap}) ->
     Keys = maps:keys(OpsMap),
@@ -55,6 +67,13 @@ set_server(State=#state{}, Server) ->
     State#state{server=Server}.
 
 %%% Internal
+
+request_details(Server, Op, OpsMap, Params) ->
+    {Path, Method, _OpSpec} = maps:get(Op, OpsMap),
+    ReplacedPath = binary:bin_to_list(replace_path(Path, Params)),
+    FullPath = Server ++ ReplacedPath,
+    AMethod = method(Method),
+    {AMethod, FullPath}.
 
 load_file(Path) ->
     {ok, Data} = file:read_file(Path),
@@ -117,3 +136,18 @@ list_of_bins_to_list_of_lists([]) ->
     [];
 list_of_bins_to_list_of_lists([H|T]) ->
     [binary:bin_to_list(H) | list_of_bins_to_list_of_lists(T)].
+
+async_read(_S=#state{}, Ref, {hackney_response, Ref, {status, StatusInt, Reason}}) ->
+    lager:debug("got status: ~p with reason ~p", [StatusInt, Reason]),
+    ok;
+async_read(_S=#state{}, Ref, {hackney_response, Ref, {headers, Headers}}) ->
+    lager:debug("got headers: ~p", [Headers]),
+    ok;
+async_read(_S=#state{}, Ref, {hackney_response, Ref, done}) ->
+    ok;
+async_read(_S=#state{}, Ref, {hackney_response, Ref, Bin}) ->
+    lager:debug("got chunk: ~p", [Bin]),
+    jsx:decode(Bin, [return_maps]);
+async_read(_S, _Ref, Unknown) ->
+    lager:debug("Unknown msg ~p", [Unknown]),
+    unknown.
