@@ -37,11 +37,8 @@ op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params) -
     {Method, Path} = request_details(Server, Op, OpsMap, Params),
     lager:debug("Found op ~p", [{Op, Path}]),
     {ok, _Code, _Headers, ReqRef} = hackney:request(Method, Path, [], <<>>, HTTPOptions),
-    lager:debug("Ref ~p", [ReqRef]),
     {ok, Body} = hackney:body(ReqRef),
-    lager:debug("Found Body ~p", [Body]),
     Data = jsx:decode(Body, [return_maps]),
-    lager:debug("Found Data ~p", [Data]),
     Data.
 
 async_op(S=#state{}, Op, Params) when is_list(Op)->
@@ -99,13 +96,11 @@ create_ops_map(Spec) ->
 add_paths_to_ops_map(Path, Data, {_PreviousPath, OpsMap}) ->
     add_paths_to_ops_map(Path, Data, OpsMap);
 add_paths_to_ops_map(Path, Data, OpsMap) ->
-    lager:debug("Add paths to ops map ~p", [Path]),
     maps:fold(fun add_path_op_to_ops_map/3, {Path, OpsMap}, Data).
 
 add_path_op_to_ops_map(Method, [Data], {Path, OpsMap}) ->
     add_path_op_to_ops_map(Method, Data, {Path, OpsMap});
 add_path_op_to_ops_map(Method, Data, {Path, OpsMap}) when is_map(Data)->
-    lager:debug("Get Operation ID from ~p", [Data]),
     case maps:is_key(<<"operationId">>, Data) of
         false -> {Path, OpsMap};
         true  -> Op = maps:get(<<"operationId">>, Data),
@@ -113,7 +108,6 @@ add_path_op_to_ops_map(Method, Data, {Path, OpsMap}) when is_map(Data)->
                  {Path, NewOpsMap}
     end;
 add_path_op_to_ops_map(_Method, Data, {Path, OpsMap}) ->
-    lager:debug("Not a map :/ ~n", [Data]),
     {Path, OpsMap}.
 
 method(<<"get">>) ->
@@ -138,16 +132,12 @@ list_of_bins_to_list_of_lists([H|T]) ->
     [binary:bin_to_list(H) | list_of_bins_to_list_of_lists(T)].
 
 async_read(_S=#state{}, Ref, {hackney_response, Ref, {status, StatusInt, Reason}}) ->
-    lager:debug("got status: ~p with reason ~p", [StatusInt, Reason]),
     ok;
 async_read(_S=#state{}, Ref, {hackney_response, Ref, {headers, Headers}}) ->
-    lager:debug("got headers: ~p", [Headers]),
     ok;
 async_read(_S=#state{}, Ref, {hackney_response, Ref, done}) ->
     ok;
 async_read(_S=#state{}, Ref, {hackney_response, Ref, Bin}) ->
-    lager:debug("got chunk: ~p", [Bin]),
     jsx:decode(Bin, [return_maps]);
 async_read(_S, _Ref, Unknown) ->
-    lager:debug("Unknown msg ~p", [Unknown]),
     unknown.
