@@ -51,3 +51,15 @@ Result = Callback(Msg).
 
 Other HTTP options cannot be passed through yet. There is an `infinity` timeout
 set explicitly for async operations. This will change in the future.
+
+# Defaults
+
+Defaults for requests can be set when first `load`ing.
+
+Options -
+
+* `default_headers` - Applied to each request, such as authorization headers.
+
+```erlang
+swaggerl:load("http://petstore.swagger.io/v2/swagger.json", [{default_headers, [{<<"x-foo">>, <<"foo">>}]}]).
+```
