@@ -107,7 +107,7 @@ add_path_op_to_ops_map(Method, Data, {Path, OpsMap}) when is_map(Data)->
                  NewOpsMap = maps:put(Op, {Path, Method, Data}, OpsMap),
                  {Path, NewOpsMap}
     end;
-add_path_op_to_ops_map(_Method, Data, {Path, OpsMap}) ->
+add_path_op_to_ops_map(_Method, _Data, {Path, OpsMap}) ->
     {Path, OpsMap}.
 
 method(<<"get">>) ->
@@ -131,13 +131,13 @@ list_of_bins_to_list_of_lists([]) ->
 list_of_bins_to_list_of_lists([H|T]) ->
     [binary:bin_to_list(H) | list_of_bins_to_list_of_lists(T)].
 
-async_read(_S=#state{}, Ref, {hackney_response, Ref, {status, StatusInt, Reason}}) ->
+async_read(_S=#state{}, Ref, {hackney_response, Ref, {status, _StatusInt, _Reason}}) ->
     ok;
-async_read(_S=#state{}, Ref, {hackney_response, Ref, {headers, Headers}}) ->
+async_read(_S=#state{}, Ref, {hackney_response, Ref, {headers, _Headers}}) ->
     ok;
 async_read(_S=#state{}, Ref, {hackney_response, Ref, done}) ->
     ok;
 async_read(_S=#state{}, Ref, {hackney_response, Ref, Bin}) ->
     jsx:decode(Bin, [return_maps]);
-async_read(_S, _Ref, Unknown) ->
+async_read(_S, _Ref, _Unknown) ->
     unknown.
