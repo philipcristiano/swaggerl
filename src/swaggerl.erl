@@ -92,7 +92,7 @@ load_http(Path, HTTPOptions) ->
     Body.
 
 decode_data(Data, State=#state{}) ->
-    lager:debug("Data ~p", [Data]),
+    io:format("Data ~p~n", [Data]),
     Spec = jsx:decode(Data, [return_maps]),
     OpsMap = create_ops_map(Spec),
     State#state{spec=Spec, ops_map=OpsMap}.
