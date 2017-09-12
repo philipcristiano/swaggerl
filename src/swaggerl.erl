@@ -28,6 +28,7 @@ load(Path, HTTPOptions) ->
         _ -> load_file(Path)
     end,
     lager:debug("HTTPOptions ~p", [HTTPOptions]),
+    lager:debug("Decode Data ~p", [Data]),
     decode_data(Data, #state{httpoptions=HTTPOptions}).
 
 op(S=#state{}, Op, Params) when is_list(Op)->
@@ -82,7 +83,7 @@ load_file(Path) ->
     Data.
 
 load_http(Path, HTTPOptions) ->
-    io:format("Options ~p~n", [HTTPOptions]),
+    io:format("load_http Options ~p~n", [HTTPOptions]),
 
     Headers = proplists:get_value(default_headers, HTTPOptions, []),
     NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
