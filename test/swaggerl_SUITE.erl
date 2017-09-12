@@ -18,7 +18,10 @@ groups() -> [{test_swaggerl,
               ba_simple_get_operation,
               bb_get_operation_with_http_options,
               ca_list_operations,
-              da_async_get_operation
+              da_async_get_operation,
+              ea_load_with_http_headers,
+              eb_get_with_http_headers,
+              ec_async_get_with_http_headers
               ]}].
 
 
@@ -53,7 +56,7 @@ ba_simple_get_operation(Config) ->
     ok.
 
 bb_get_operation_with_http_options(Config) ->
-    HTTPOptions = make_ref(),
+    HTTPOptions = [make_ref()],
     Conf0 = load_pet_fixture(Config, HTTPOptions),
     Result = hackney_response([{body, {ok, jsx:encode(#{})}}]),
     ok = meck:expect(hackney, request, fun(get,
@@ -98,6 +101,68 @@ da_async_get_operation(Config) ->
     true = meck:validate(hackney),
     ?assertEqual(#{}, Resp),
     ok.
+
+ea_load_with_http_headers(Config) ->
+    PetSwagger = ?config(pet_swagger, Config),
+    {ok, PSData} = file:read_file(PetSwagger),
+    Result = hackney_response([{body, {ok, PSData}}]),
+    Headers = [{"header-1", make_ref()}],
+    ok = meck:expect(hackney, request, fun(get,
+                                           "http://example.com",
+                                           RequestHeaders,
+                                           <<>>,
+                                           _FunHTTPOptions) ->
+        ?assertEqual(Headers, RequestHeaders),
+        Result
+    end),
+    ?MUT:load("http://example.com", [{default_headers, Headers}]),
+    ok.
+
+
+eb_get_with_http_headers(Config) ->
+    Headers = [make_ref()],
+    HTTPOptions = [{default_headers, Headers}],
+    Conf0 = load_pet_fixture(Config, HTTPOptions),
+    Result = hackney_response([{body, {ok, jsx:encode(#{})}}]),
+    ok = meck:expect(hackney, request, fun(get,
+                                           "http://localhost/pet/0",
+                                           RequestHeaders,
+                                           <<>>,
+                                           []) ->
+        ?assertEqual(Headers, RequestHeaders),
+        Result end),
+
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    Resp = ?MUT:op(Conf1, "getPetById", [{"petId", 0}]),
+    true = meck:validate(hackney),
+    ?assertEqual(#{}, Resp),
+    ok.
+
+ec_async_get_with_http_headers(Config) ->
+    Headers = [make_ref()],
+    HTTPOptions = [{default_headers, Headers}],
+    Conf0 = load_pet_fixture(Config, HTTPOptions),
+    Ref = make_ref(),
+    Result = {hackney_response, Ref, jsx:encode(#{})},
+    ok = meck:expect(hackney, request, fun(get,
+                                           Path,
+                                           RequestHeaders,
+                                           <<>>,
+                                           Options) ->
+        ?assertEqual("http://localhost/pet/0", Path),
+        ?assertEqual(Headers, RequestHeaders),
+        ?assertEqual([{recv_timeout,infinity}, async], Options),
+        async_http_send(self(), Result),
+        {ok, Ref} end),
+
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    Callback = ?MUT:async_op(Conf1, "getPetById", [{"petId", 0}]),
+    Msg = get_msg(),
+    Resp = Callback(Msg),
+    true = meck:validate(hackney),
+    ?assertEqual(#{}, Resp),
+    ok.
+
 
 hackney_response(Result) ->
     {ok, code, headers, Result}.
