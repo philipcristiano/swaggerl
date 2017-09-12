@@ -88,8 +88,12 @@ load_http(Path, HTTPOptions) ->
     Headers = proplists:get_value(default_headers, HTTPOptions, []),
     NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
 
-    {ok, _Code, _Headers, ReqRef} = hackney:request(get, Path, Headers, <<>>, NonSwaggerlHTTPOptions),
-    {ok, Body} = hackney:body(ReqRef),
+    {ok, Code, _Headers, ReqRef} = hackney:request(get, Path, Headers, <<>>, NonSwaggerlHTTPOptions),
+    {ok, Body} = case Code of
+        200 -> hackney:body(ReqRef);
+        _ -> {ok, ErrBody} = hackney:body(ReqRef),
+             {error, Headers, ErrBody}
+    end,
     Body.
 
 decode_data(Data, State=#state{}) ->
