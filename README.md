@@ -5,7 +5,7 @@ A minimal Swagger client in Erlang. At the moment attempts to be useful in perso
 
 ## Example
 
-```
+```erlang
 Spec = swaggerl:load("http://petstore.swagger.io/v2/swagger.json").
 API = swaggerl:set_server("http://petstore.swagger.io").
 
@@ -27,7 +27,7 @@ Async operations can be made with `swaggerl:async_op/3`. It has the same
 arguments as `swagger:op/3` but returns a callback that will parse messages
 passed to it.
 
-```
+```erlang
 Spec = swaggerl:load("http://petstore.swagger.io/v2/swagger.json").
 API = swaggerl:set_server("http://petstore.swagger.io").
 
