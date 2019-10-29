@@ -5,6 +5,7 @@
 -export([load/1,
          load/2,
          op/3,
+         op/4,
          async_op/3,
          operations/1,
          set_server/2
@@ -27,19 +28,24 @@ load(Path, HTTPOptions) ->
         [$h, $t, $t, $p | _Rest] = Path -> load_http(Path, HTTPOptions);
         _ -> load_file(Path)
     end,
-    lager:debug("HTTPOptions ~p", [HTTPOptions]),
     decode_data(Data, #state{httpoptions=HTTPOptions}).
 
 op(S=#state{}, Op, Params) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
-    op(S, BOp, Params);
-op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params) ->
+    op(S, BOp, Params, []);
+op(S=#state{}, Op, Params) ->
+    op(S, Op, Params, []).
+
+op(S=#state{}, Op, Params, ExtraHTTPOps) when is_list(Op)->
+    BOp = binary:list_to_bin(Op),
+    op(S, BOp, Params, ExtraHTTPOps);
+op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params, ExtraHTTPOps) ->
     {Method, Path} = request_details(Server, Op, OpsMap, Params),
     Headers = proplists:get_value(default_headers, HTTPOptions, []),
     NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
-
+    CombinedHTTPOptions = NonSwaggerlHTTPOptions ++ ExtraHTTPOps,
     lager:debug("Found op ~p", [{Op, Path}]),
-    {ok, _Code, _Headers, ReqRef} = hackney:request(Method, Path, Headers, <<>>, NonSwaggerlHTTPOptions),
+    {ok, _Code, _Headers, ReqRef} = hackney:request(Method, Path, Headers, <<>>, CombinedHTTPOptions),
     {ok, Body} = hackney:body(ReqRef),
     Data = jsx:decode(Body, [return_maps]),
     Data.
@@ -82,14 +88,17 @@ load_file(Path) ->
     Data.
 
 load_http(Path, HTTPOptions) ->
-    io:format("Options ~p~n", [HTTPOptions]),
-
     Headers = proplists:get_value(default_headers, HTTPOptions, []),
     NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
 
-    {ok, _Code, _Headers, ReqRef} = hackney:request(get, Path, Headers, <<>>, NonSwaggerlHTTPOptions),
-    {ok, Body} = hackney:body(ReqRef),
-    Body.
+    Resp = hackney:request(get, Path, Headers, <<>>, NonSwaggerlHTTPOptions),
+    ReturnBody = case Resp of
+        {ok, _Code, _Headers, ReqRef} -> {ok, Body} = hackney:body(ReqRef),
+                                         Body;
+        Else -> io:format("error ~p~n", [Else]),
+                error
+    end,
+    ReturnBody.
 
 decode_data(Data, State=#state{}) ->
     % lager:debug("Data ~p", [Data]),
