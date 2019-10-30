@@ -40,12 +40,12 @@ op(S=#state{}, Op, Params, ExtraHTTPOps) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
     op(S, BOp, Params, ExtraHTTPOps);
 op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params, ExtraHTTPOps) ->
-    {Method, Path} = request_details(Server, Op, OpsMap, Params),
+    {Method, Path, Payload} = request_details(Server, Op, OpsMap, Params),
     Headers = proplists:get_value(default_headers, HTTPOptions, []),
     NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
     CombinedHTTPOptions = NonSwaggerlHTTPOptions ++ ExtraHTTPOps,
     lager:debug("Found op ~p", [{Op, Path}]),
-    {ok, _Code, _Headers, ReqRef} = hackney:request(Method, Path, Headers, <<>>, CombinedHTTPOptions),
+    {ok, _Code, _Headers, ReqRef} = hackney:request(Method, Path, Headers, Payload, CombinedHTTPOptions),
     {ok, Body} = hackney:body(ReqRef),
     Data = jsx:decode(Body, [return_maps]),
     Data.
@@ -54,12 +54,12 @@ async_op(S=#state{}, Op, Params) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
     async_op(S, BOp, Params);
 async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params) ->
-    {Method, Path} = request_details(Server, Op, OpsMap, Params),
+    {Method, Path, Payload} = request_details(Server, Op, OpsMap, Params),
     Headers = proplists:get_value(default_headers, HTTPOptions, []),
     NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
     lager:debug("Found op ~p", [{Op, self()}]),
     Options = [{recv_timeout, infinity},  async] ++ NonSwaggerlHTTPOptions,
-    {ok, RequestId} = hackney:request(Method, Path, Headers, <<>>, Options),
+    {ok, RequestId} = hackney:request(Method, Path, Headers, Payload, Options),
     lager:debug("RequestId ~p", [RequestId]),
     Callback = fun(Msg) ->
         async_read(S, RequestId, Msg) end,
@@ -80,8 +80,15 @@ request_details(Server, Op, OpsMap, Params) ->
     {Path, Method, _OpSpec} = maps:get(Op, OpsMap),
     ReplacedPath = binary:bin_to_list(replace_path(Path, Params)),
     FullPath = Server ++ ReplacedPath,
+    PathWithQuery = add_query_params(FullPath, Params),
     AMethod = method(Method),
-    {AMethod, FullPath}.
+    {AMethod, PathWithQuery, <<>>}.
+
+add_query_params(Path, []) ->
+    Path;
+add_query_params(Path, Params) ->
+    QueryParams = uri_string:compose_query(Params),
+    Path ++ "?" ++ QueryParams.
 
 load_file(Path) ->
     {ok, Data} = file:read_file(Path),
@@ -150,12 +157,12 @@ list_of_bins_to_list_of_lists([]) ->
 list_of_bins_to_list_of_lists([H|T]) ->
     [binary:bin_to_list(H) | list_of_bins_to_list_of_lists(T)].
 
-async_read(_S=#state{}, Ref, {hackney_response, Ref, {status, _StatusInt, _Reason}}) ->
-    ok;
+async_read(_S=#state{}, Ref, {hackney_response, Ref, {status, StatusInt, _Reason}}) ->
+    {status, StatusInt};
 async_read(_S=#state{}, Ref, {hackney_response, Ref, {headers, _Headers}}) ->
     ok;
 async_read(_S=#state{}, Ref, {hackney_response, Ref, done}) ->
-    ok;
+    done;
 async_read(_S=#state{}, Ref, {hackney_response, Ref, Bin}) ->
     jsx:decode(Bin, [return_maps]);
 async_read(_S, _Ref, _Unknown) ->
