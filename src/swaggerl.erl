@@ -1,6 +1,6 @@
 -module(swaggerl).
 
--compile({parse_transform, lager_transform}).
+-include_lib("kernel/include/logger.hrl").
 
 -export([load/1,
          load/2,
@@ -44,7 +44,7 @@ op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params, E
     Headers = proplists:get_value(default_headers, HTTPOptions, []),
     NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
     CombinedHTTPOptions = NonSwaggerlHTTPOptions ++ ExtraHTTPOps,
-    lager:debug("Found op ~p", [{Op, Path}]),
+    logger:debug("Found op ~p", [{Op, Path}]),
     {ok, _Code, _Headers, ReqRef} = hackney:request(Method, Path, Headers, Payload, CombinedHTTPOptions),
     {ok, Body} = hackney:body(ReqRef),
     Data = jsx:decode(Body, [return_maps]),
@@ -57,10 +57,10 @@ async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, P
     {Method, Path, Payload} = request_details(Server, Op, OpsMap, Params),
     Headers = proplists:get_value(default_headers, HTTPOptions, []),
     NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
-    lager:debug("Found op ~p", [{Op, self()}]),
+    logger:debug("Found op ~p", [{Op, self()}]),
     Options = [{recv_timeout, infinity},  async] ++ NonSwaggerlHTTPOptions,
     {ok, RequestId} = hackney:request(Method, Path, Headers, Payload, Options),
-    lager:debug("RequestId ~p", [RequestId]),
+    logger:debug("RequestId ~p", [RequestId]),
     Callback = fun(Msg) ->
         async_read(S, RequestId, Msg) end,
 
@@ -108,7 +108,7 @@ load_http(Path, HTTPOptions) ->
     ReturnBody.
 
 decode_data(Data, State=#state{}) ->
-    % lager:debug("Data ~p", [Data]),
+    % logger:debug("Data ~p", [Data]),
     Spec = jsx:decode(Data, [return_maps]),
     OpsMap = create_ops_map(Spec),
     State#state{spec=Spec, ops_map=OpsMap}.

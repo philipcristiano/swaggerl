@@ -1,6 +1,5 @@
 -module(swaggerl_SUITE).
 
-% -compile({parse_transform, lager_transform}).
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -27,7 +26,6 @@ groups() -> [{test_swaggerl,
 
 
 init_per_testcase(_, Config) ->
-    ok = lager_common_test_backend:bounce(debug),
     ok = meck:new(hackney, []),
     DataDir = ?config(data_dir, Config),
     PetSwagger = DataDir ++ "swagger-pets.json",
