@@ -56,10 +56,8 @@ async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, P
     {Method, Path, Payload} = request_details(Server, Op, OpsMap, Params),
     Headers = proplists:get_value(default_headers, HTTPOptions, []),
     NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
-    logger:debug("Found op ~p", [{Op, self()}]),
     Options = [{recv_timeout, infinity},  async] ++ NonSwaggerlHTTPOptions,
     {ok, RequestId} = hackney:request(Method, Path, Headers, Payload, Options),
-    logger:debug("RequestId ~p", [RequestId]),
     Callback = fun(Msg) ->
         async_read(S, RequestId, Msg) end,
 
@@ -107,7 +105,6 @@ load_http(Path, HTTPOptions) ->
     ReturnBody.
 
 decode_data(Data, State=#state{}) ->
-    % logger:debug("Data ~p", [Data]),
     Spec = jsx:decode(Data, [return_maps]),
     OpsMap = create_ops_map(Spec),
     State#state{spec=Spec, ops_map=OpsMap}.
