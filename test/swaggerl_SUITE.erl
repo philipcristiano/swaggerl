@@ -45,8 +45,17 @@ aa_load_test(Config) ->
 ba_simple_get_operation(Config) ->
     Conf0 = load_pet_fixture(Config),
     Result = hackney_response([{body, {ok, jsx:encode(#{})}}]),
-    ok = meck:expect(hackney, request, fun(get, "http://localhost/pets/0", [], <<>>, []) -> Result end),
 
+    ok = meck:expect(hackney, request, fun(get,
+                                           URL,
+                                           RequestHeaders,
+                                           Body,
+                                           _FunHTTPOptions) ->
+        ?assertEqual(URL, "http://localhost/pets/0"),
+        ?assertEqual([], RequestHeaders),
+        ?assertEqual(<<>>, Body),
+        Result
+    end),
     Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
     Resp = ?MUT:op(Conf1, <<"find pet by id">>, [{"id", "0"}]),
     true = meck:validate(hackney),
