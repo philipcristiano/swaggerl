@@ -1,0 +1,19 @@
+name: Erlang CI
+
+on: [push]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    container:
+      image: erlang:21
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Compile
+      run: make deps app
+    - name: Run tests
+      run: rmake tests
