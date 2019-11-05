@@ -16,4 +16,4 @@ jobs:
     - name: Compile
       run: make deps app
     - name: Run tests
-      run: rmake tests
+      run: make tests
