@@ -21,7 +21,9 @@ groups() -> [{test_swaggerl,
               da_async_get_operation,
               ea_load_with_http_headers,
               eb_get_with_http_headers,
-              ec_async_get_with_http_headers
+              ec_async_get_with_http_headers,
+              fa_get_without_required_param,
+              fb_async_get_without_required_param
               ]}].
 
 
@@ -193,6 +195,21 @@ ec_async_get_with_http_headers(Config) ->
     ?assertEqual(#{}, Resp),
     ok.
 
+fa_get_without_required_param(Config) ->
+    Conf0 = load_pet_fixture(Config),
+
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    Resp = ?MUT:op(Conf1, <<"find pet by id">>, []),
+    ?assertEqual({error, missing_required_field, <<"id">>}, Resp),
+    ok.
+
+fb_async_get_without_required_param(Config) ->
+    Conf0 = load_pet_fixture(Config),
+
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    Resp = ?MUT:async_op(Conf1, <<"find pet by id">>, []),
+    ?assertEqual({error, missing_required_field, <<"id">>}, Resp),
+    ok.
 
 hackney_response(Result) ->
     {ok, code, headers, Result}.

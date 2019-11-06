@@ -63,3 +63,7 @@ Options -
 ```erlang
 swaggerl:load("http://petstore.swagger.io/v2/swagger.json", [{default_headers, [{<<"x-foo">>, <<"foo">>}]}]).
 ```
+
+## Errors
+
+Errors for operations not matching the API specification will be returned from `op` and `async_op` in the form of `{error, Reason, Info}`
