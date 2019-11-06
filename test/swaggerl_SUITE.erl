@@ -16,11 +16,14 @@ groups() -> [{test_swaggerl,
              [aa_load_test,
               ba_simple_get_operation,
               bb_get_operation_with_http_options,
+              bc_list_operation_with_query_string,
               ca_list_operations,
               da_async_get_operation,
               ea_load_with_http_headers,
               eb_get_with_http_headers,
-              ec_async_get_with_http_headers
+              ec_async_get_with_http_headers,
+              fa_get_without_required_param,
+              fb_async_get_without_required_param
               ]}].
 
 
@@ -45,8 +48,17 @@ aa_load_test(Config) ->
 ba_simple_get_operation(Config) ->
     Conf0 = load_pet_fixture(Config),
     Result = hackney_response([{body, {ok, jsx:encode(#{})}}]),
-    ok = meck:expect(hackney, request, fun(get, "http://localhost/pets/0", [], <<>>, []) -> Result end),
 
+    ok = meck:expect(hackney, request, fun(get,
+                                           URL,
+                                           RequestHeaders,
+                                           Body,
+                                           _FunHTTPOptions) ->
+        ?assertEqual(URL, "http://localhost/pets/0"),
+        ?assertEqual([], RequestHeaders),
+        ?assertEqual(<<>>, Body),
+        Result
+    end),
     Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
     Resp = ?MUT:op(Conf1, <<"find pet by id">>, [{"id", "0"}]),
     true = meck:validate(hackney),
@@ -67,6 +79,26 @@ bb_get_operation_with_http_options(Config) ->
 
     Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
     Resp = ?MUT:op(Conf1, "find pet by id", [{"id", "0"}]),
+    true = meck:validate(hackney),
+    ?assertEqual(#{}, Resp),
+    ok.
+
+bc_list_operation_with_query_string(Config) ->
+    Conf0 = load_pet_fixture(Config),
+    Result = hackney_response([{body, {ok, jsx:encode(#{})}}]),
+
+    ok = meck:expect(hackney, request, fun(get,
+                                           URL,
+                                           RequestHeaders,
+                                           Body,
+                                           _FunHTTPOptions) ->
+        ?assertEqual("http://localhost/pets?limit=5", URL),
+        ?assertEqual([], RequestHeaders),
+        ?assertEqual(<<>>, Body),
+        Result
+    end),
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    Resp = ?MUT:op(Conf1, <<"findPets">>, [{"limit", "5"}]),
     true = meck:validate(hackney),
     ?assertEqual(#{}, Resp),
     ok.
@@ -163,6 +195,21 @@ ec_async_get_with_http_headers(Config) ->
     ?assertEqual(#{}, Resp),
     ok.
 
+fa_get_without_required_param(Config) ->
+    Conf0 = load_pet_fixture(Config),
+
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    Resp = ?MUT:op(Conf1, <<"find pet by id">>, []),
+    ?assertEqual({error, missing_required_field, <<"id">>}, Resp),
+    ok.
+
+fb_async_get_without_required_param(Config) ->
+    Conf0 = load_pet_fixture(Config),
+
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    Resp = ?MUT:async_op(Conf1, <<"find pet by id">>, []),
+    ?assertEqual({error, missing_required_field, <<"id">>}, Resp),
+    ok.
 
 hackney_response(Result) ->
     {ok, code, headers, Result}.
