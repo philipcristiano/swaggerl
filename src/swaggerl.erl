@@ -73,13 +73,53 @@ set_server(State=#state{}, Server) ->
 
 %%% Internal
 
-request_details(Server, Op, OpsMap, Params) ->
-    {Path, Method, _OpSpec} = maps:get(Op, OpsMap),
-    ReplacedPath = binary:bin_to_list(replace_path(Path, Params)),
+request_details(Server, Op, OpsMap, InParams) ->
+    {Path, Method, OpSpec} = maps:get(Op, OpsMap),
+    io:format("Spec ~p~n", [OpSpec]),
+    Params = normalize_param_names(InParams),
+    ParamSpecs = maps:get(<<"parameters">>, OpSpec),
+    SortedParams = sort_params(ParamSpecs, Params, #{}),
+
+    PathParams = maps:get(path, SortedParams, []),
+    ReplacedPath = binary:bin_to_list(replace_path(Path, PathParams)),
     FullPath = Server ++ ReplacedPath,
-    add_query_params(FullPath, Params),
+
+    QueryParams = maps:get(query, SortedParams, []),
+    PathWithQueryParams = add_query_params(FullPath, QueryParams),
+
     AMethod = method(Method),
-    {AMethod, FullPath, <<>>}.
+    {AMethod, PathWithQueryParams, <<>>}.
+
+sort_params([], _Params, Sorted) ->
+    Sorted;
+sort_params([H|T], Params, Sorted) ->
+    In = in_type(maps:get(<<"in">>, H)),
+    Name = maps:get(<<"name">>, H),
+    Required = maps:get(<<"required">>, H, false),
+
+    io:format("Sort ~p~n", [{In, Name, Params, T}]),
+
+    Value = proplists:get_value(Name, Params),
+    Sort = maps:get(In, Sorted, []),
+    NewSort = add_sort_param_to_proplist(Required, Name, Value, Sort),
+    NewSorted = maps:put(In, NewSort, Sorted),
+    io:format("Sorted ~p~n", [{NewSorted}]),
+    sort_params(T, Params, NewSorted).
+
+
+in_type(<<"path">>) ->
+    path;
+in_type(<<"query">>) ->
+    query.
+
+add_sort_param_to_proplist(false, _, undefined, Sort) ->
+    Sort;
+add_sort_param_to_proplist(true, Name, undefined, Sort) ->
+    io:format("Missing value for param should raise this somehow!~p~n", [Name]),
+    Sort;
+add_sort_param_to_proplist(_, Name, Value, Sort) ->
+    Sort ++ [{Name, Value}].
+
 
 add_query_params(Path, []) ->
     Path;
@@ -166,3 +206,11 @@ async_read(_S=#state{}, Ref, {hackney_response, Ref, Bin}) ->
     jsx:decode(Bin, [return_maps]);
 async_read(_S, _Ref, _Unknown) ->
     unknown.
+
+normalize_param_names([{Name, Value} | T]) when is_list(Name) ->
+    BName = binary:list_to_bin(Name),
+    [{BName, Value}] ++ normalize_param_names(T);
+normalize_param_names([{Name, Value} | T]) ->
+    [{Name, Value}] ++ normalize_param_names(T);
+normalize_param_names([]) ->
+    [].
