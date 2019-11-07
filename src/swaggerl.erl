@@ -83,7 +83,6 @@ set_server(State=#state{}, Server) ->
 
 request_details(Server, Op, OpsMap, InParams) ->
     {Path, Method, OpSpec} = maps:get(Op, OpsMap),
-    io:format("Spec ~p~n", [OpSpec]),
     Params = normalize_param_names(InParams),
     ParamSpecs = maps:get(<<"parameters">>, OpSpec),
     SortedParams = sort_params(ParamSpecs, Params, #{}),
@@ -107,15 +106,12 @@ sort_params([H|T], Params, Sorted) ->
     Name = maps:get(<<"name">>, H),
     Required = maps:get(<<"required">>, H, false),
 
-    io:format("Sort ~p~n", [{In, Name, Params, T}]),
-
     Value = proplists:get_value(Name, Params),
     Sort = maps:get(In, Sorted, []),
     NewSort = add_sort_param_to_proplist(Required, Name, Value, Sort),
     case NewSort of
         {error, Reason, Info} -> {error, Reason, Info};
         NewSort -> NewSorted = maps:put(In, NewSort, Sorted),
-                   io:format("Sorted ~p~n", [{NewSorted}]),
                    sort_params(T, Params, NewSorted)
     end.
 
@@ -128,7 +124,6 @@ in_type(<<"query">>) ->
 add_sort_param_to_proplist(false, _, undefined, Sort) ->
     Sort;
 add_sort_param_to_proplist(true, Name, undefined, _Sort) ->
-    io:format("Missing value for param should raise this somehow!~p~n", [Name]),
     {error, missing_required_field, Name};
 add_sort_param_to_proplist(_, Name, Value, Sort) ->
     Sort ++ [{Name, Value}].
@@ -152,8 +147,7 @@ load_http(Path, HTTPOptions) ->
     ReturnBody = case Resp of
         {ok, _Code, _Headers, ReqRef} -> {ok, Body} = hackney:body(ReqRef),
                                          Body;
-        Else -> io:format("error ~p~n", [Else]),
-                error
+        Else -> {error, Else}
     end,
     ReturnBody.
 
