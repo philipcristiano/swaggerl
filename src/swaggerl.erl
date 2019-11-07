@@ -39,15 +39,20 @@ op(S=#state{}, Op, Params) ->
 op(S=#state{}, Op, Params, ExtraHTTPOps) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
     op(S, BOp, Params, ExtraHTTPOps);
-op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params, ExtraHTTPOps) ->
+op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
+        Op, Params, ExtraHTTPOps) ->
     RequestDetails = request_details(Server, Op, OpsMap, Params),
     case RequestDetails of
         {error, Reason, Info} -> {error, Reason, Info};
         {Method, Path, Payload} ->
-            Headers = proplists:get_value(default_headers, HTTPOptions, []),
-            NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
+            Headers = proplists:get_value(default_headers,
+                                          HTTPOptions,
+                                          []),
+            NonSwaggerlHTTPOptions = proplists:delete(default_headers,
+                                                      HTTPOptions),
             CombinedHTTPOptions = NonSwaggerlHTTPOptions ++ ExtraHTTPOps,
-            {ok, _Code, _Headers, ReqRef} = hackney:request(Method, Path, Headers, Payload, CombinedHTTPOptions),
+            {ok, _Code, _Headers, ReqRef} = hackney:request(
+                Method, Path, Headers, Payload, CombinedHTTPOptions),
             {ok, Body} = hackney:body(ReqRef),
             Data = jsx:decode(Body, [return_maps]),
             Data
@@ -56,15 +61,19 @@ op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params, E
 async_op(S=#state{}, Op, Params) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
     async_op(S, BOp, Params);
-async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params) ->
+async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
+            Op, Params) ->
     RequestDetails = request_details(Server, Op, OpsMap, Params),
     case RequestDetails of
         {error, Reason, Info} -> {error, Reason, Info};
         {Method, Path, Payload} ->
           Headers = proplists:get_value(default_headers, HTTPOptions, []),
-          NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
-          Options = [{recv_timeout, infinity},  async] ++ NonSwaggerlHTTPOptions,
-          {ok, RequestId} = hackney:request(Method, Path, Headers, Payload, Options),
+          NonSwaggerlHTTPOptions = proplists:delete(
+              default_headers, HTTPOptions),
+          Options = [{recv_timeout, infinity},
+                      async] ++ NonSwaggerlHTTPOptions,
+          {ok, RequestId} = hackney:request(
+              Method, Path, Headers, Payload, Options),
           Callback = fun(Msg) ->
               async_read(S, RequestId, Msg) end,
 
@@ -83,18 +92,19 @@ set_server(State=#state{}, Server) ->
 
 request_details(Server, Op, OpsMap, InParams) ->
     {Path, Method, OpSpec} = maps:get(Op, OpsMap),
-    io:format("Spec ~p~n", [OpSpec]),
     Params = normalize_param_names(InParams),
     ParamSpecs = maps:get(<<"parameters">>, OpSpec),
     SortedParams = sort_params(ParamSpecs, Params, #{}),
     case SortedParams of
         {error, Reason, Info} -> {error, Reason, Info};
         SortedParams -> PathParams = maps:get(path, SortedParams, []),
-                        ReplacedPath = binary:bin_to_list(replace_path(Path, PathParams)),
+                        ReplacedPath = binary:bin_to_list(
+                            replace_path(Path, PathParams)),
                         FullPath = Server ++ ReplacedPath,
 
                         QueryParams = maps:get(query, SortedParams, []),
-                        PathWithQueryParams = add_query_params(FullPath, QueryParams),
+                        PathWithQueryParams = add_query_params(
+                            FullPath, QueryParams),
 
                         AMethod = method(Method),
                         {AMethod, PathWithQueryParams, <<>>}
@@ -107,15 +117,12 @@ sort_params([H|T], Params, Sorted) ->
     Name = maps:get(<<"name">>, H),
     Required = maps:get(<<"required">>, H, false),
 
-    io:format("Sort ~p~n", [{In, Name, Params, T}]),
-
     Value = proplists:get_value(Name, Params),
     Sort = maps:get(In, Sorted, []),
     NewSort = add_sort_param_to_proplist(Required, Name, Value, Sort),
     case NewSort of
         {error, Reason, Info} -> {error, Reason, Info};
         NewSort -> NewSorted = maps:put(In, NewSort, Sorted),
-                   io:format("Sorted ~p~n", [{NewSorted}]),
                    sort_params(T, Params, NewSorted)
     end.
 
@@ -128,7 +135,6 @@ in_type(<<"query">>) ->
 add_sort_param_to_proplist(false, _, undefined, Sort) ->
     Sort;
 add_sort_param_to_proplist(true, Name, undefined, _Sort) ->
-    io:format("Missing value for param should raise this somehow!~p~n", [Name]),
     {error, missing_required_field, Name};
 add_sort_param_to_proplist(_, Name, Value, Sort) ->
     Sort ++ [{Name, Value}].
@@ -152,8 +158,7 @@ load_http(Path, HTTPOptions) ->
     ReturnBody = case Resp of
         {ok, _Code, _Headers, ReqRef} -> {ok, Body} = hackney:body(ReqRef),
                                          Body;
-        Else -> io:format("error ~p~n", [Else]),
-                error
+        Else -> {error, Else}
     end,
     ReturnBody.
 
@@ -209,7 +214,8 @@ list_of_bins_to_list_of_lists([]) ->
 list_of_bins_to_list_of_lists([H|T]) ->
     [binary:bin_to_list(H) | list_of_bins_to_list_of_lists(T)].
 
-async_read(_S=#state{}, Ref, {hackney_response, Ref, {status, StatusInt, _Reason}}) ->
+async_read(_S=#state{}, Ref,
+      {hackney_response, Ref, {status, StatusInt, _Reason}}) ->
     {status, StatusInt};
 async_read(_S=#state{}, Ref, {hackney_response, Ref, {headers, _Headers}}) ->
     ok;
