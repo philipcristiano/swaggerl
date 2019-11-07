@@ -39,15 +39,20 @@ op(S=#state{}, Op, Params) ->
 op(S=#state{}, Op, Params, ExtraHTTPOps) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
     op(S, BOp, Params, ExtraHTTPOps);
-op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params, ExtraHTTPOps) ->
+op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
+        Op, Params, ExtraHTTPOps) ->
     RequestDetails = request_details(Server, Op, OpsMap, Params),
     case RequestDetails of
         {error, Reason, Info} -> {error, Reason, Info};
         {Method, Path, Payload} ->
-            Headers = proplists:get_value(default_headers, HTTPOptions, []),
-            NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
+            Headers = proplists:get_value(default_headers,
+                                          HTTPOptions,
+                                          []),
+            NonSwaggerlHTTPOptions = proplists:delete(default_headers,
+                                                      HTTPOptions),
             CombinedHTTPOptions = NonSwaggerlHTTPOptions ++ ExtraHTTPOps,
-            {ok, _Code, _Headers, ReqRef} = hackney:request(Method, Path, Headers, Payload, CombinedHTTPOptions),
+            {ok, _Code, _Headers, ReqRef} = hackney:request(
+                Method, Path, Headers, Payload, CombinedHTTPOptions),
             {ok, Body} = hackney:body(ReqRef),
             Data = jsx:decode(Body, [return_maps]),
             Data
@@ -56,15 +61,19 @@ op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params, E
 async_op(S=#state{}, Op, Params) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
     async_op(S, BOp, Params);
-async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions}, Op, Params) ->
+async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
+            Op, Params) ->
     RequestDetails = request_details(Server, Op, OpsMap, Params),
     case RequestDetails of
         {error, Reason, Info} -> {error, Reason, Info};
         {Method, Path, Payload} ->
           Headers = proplists:get_value(default_headers, HTTPOptions, []),
-          NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
-          Options = [{recv_timeout, infinity},  async] ++ NonSwaggerlHTTPOptions,
-          {ok, RequestId} = hackney:request(Method, Path, Headers, Payload, Options),
+          NonSwaggerlHTTPOptions = proplists:delete(
+              default_headers, HTTPOptions),
+          Options = [{recv_timeout, infinity},
+                      async] ++ NonSwaggerlHTTPOptions,
+          {ok, RequestId} = hackney:request(
+              Method, Path, Headers, Payload, Options),
           Callback = fun(Msg) ->
               async_read(S, RequestId, Msg) end,
 
@@ -89,11 +98,13 @@ request_details(Server, Op, OpsMap, InParams) ->
     case SortedParams of
         {error, Reason, Info} -> {error, Reason, Info};
         SortedParams -> PathParams = maps:get(path, SortedParams, []),
-                        ReplacedPath = binary:bin_to_list(replace_path(Path, PathParams)),
+                        ReplacedPath = binary:bin_to_list(
+                            replace_path(Path, PathParams)),
                         FullPath = Server ++ ReplacedPath,
 
                         QueryParams = maps:get(query, SortedParams, []),
-                        PathWithQueryParams = add_query_params(FullPath, QueryParams),
+                        PathWithQueryParams = add_query_params(
+                            FullPath, QueryParams),
 
                         AMethod = method(Method),
                         {AMethod, PathWithQueryParams, <<>>}
@@ -203,7 +214,8 @@ list_of_bins_to_list_of_lists([]) ->
 list_of_bins_to_list_of_lists([H|T]) ->
     [binary:bin_to_list(H) | list_of_bins_to_list_of_lists(T)].
 
-async_read(_S=#state{}, Ref, {hackney_response, Ref, {status, StatusInt, _Reason}}) ->
+async_read(_S=#state{}, Ref,
+      {hackney_response, Ref, {status, StatusInt, _Reason}}) ->
     {status, StatusInt};
 async_read(_S=#state{}, Ref, {hackney_response, Ref, {headers, _Headers}}) ->
     ok;
