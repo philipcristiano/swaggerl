@@ -17,3 +17,5 @@ jobs:
       run: make deps app
     - name: Run tests
       run: make tests
+    - name: Dialyze
+      run: make dialyze
