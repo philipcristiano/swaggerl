@@ -23,7 +23,8 @@ groups() -> [{test_swaggerl,
               eb_get_with_http_headers,
               ec_async_get_with_http_headers,
               fa_get_without_required_param,
-              fb_async_get_without_required_param
+              fb_async_get_without_required_param,
+              ga_post_operation
               ]}].
 
 
@@ -209,6 +210,27 @@ fb_async_get_without_required_param(Config) ->
     Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
     Resp = ?MUT:async_op(Conf1, <<"find pet by id">>, []),
     ?assertEqual({error, missing_required_field, <<"id">>}, Resp),
+    ok.
+
+ga_post_operation(Config) ->
+    Conf0 = load_pet_fixture(Config),
+    Result = hackney_response([{body, {ok, jsx:encode(#{})}}]),
+
+    ok = meck:expect(hackney, request, fun(Method,
+                                           URL,
+                                           RequestHeaders,
+                                           Body,
+                                           _FunHTTPOptions) ->
+        ?assertEqual(post, Method),
+        ?assertEqual(URL, "http://localhost/pets"),
+        ?assertEqual([], RequestHeaders),
+        ?assertEqual(<<"{\"pet\":{\"foo\":\"bar\"}}">>, Body),
+        Result
+    end),
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    Resp = ?MUT:op(Conf1, <<"addPet">>, [{"pet", [{foo, bar}]}]),
+    true = meck:validate(hackney),
+    ?assertEqual(#{}, Resp),
     ok.
 
 hackney_response(Result) ->

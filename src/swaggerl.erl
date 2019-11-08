@@ -95,6 +95,7 @@ request_details(Server, Op, OpsMap, InParams) ->
     Params = normalize_param_names(InParams),
     ParamSpecs = maps:get(<<"parameters">>, OpSpec),
     SortedParams = sort_params(ParamSpecs, Params, #{}),
+
     case SortedParams of
         {error, Reason, Info} -> {error, Reason, Info};
         SortedParams -> PathParams = maps:get(path, SortedParams, []),
@@ -106,8 +107,11 @@ request_details(Server, Op, OpsMap, InParams) ->
                         PathWithQueryParams = add_query_params(
                             FullPath, QueryParams),
 
+                        BodyParam = maps:get(body, SortedParams, []),
+                        Payload = encode_body(BodyParam),
+
                         AMethod = method(Method),
-                        {AMethod, PathWithQueryParams, <<>>}
+                        {AMethod, PathWithQueryParams, Payload}
     end.
 
 sort_params([], _Params, Sorted) ->
@@ -126,11 +130,20 @@ sort_params([H|T], Params, Sorted) ->
                    sort_params(T, Params, NewSorted)
     end.
 
+encode_body([]) ->
+    <<>>;
+encode_body(Body) ->
+    io:format("Body ~p~n", [Body]),
+    jsx:encode(Body).
+
 
 in_type(<<"path">>) ->
     path;
 in_type(<<"query">>) ->
-    query.
+    query;
+in_type(<<"body">>) ->
+    body.
+
 
 add_sort_param_to_proplist(false, _, undefined, Sort) ->
     Sort;
@@ -191,7 +204,9 @@ add_path_op_to_ops_map(_Method, _Data, {Path, OpsMap}) ->
     {Path, OpsMap}.
 
 method(<<"get">>) ->
-    get.
+    get;
+method(<<"post">>) ->
+    post.
 
 replace_path(Path, []) ->
     Path;
