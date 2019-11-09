@@ -136,7 +136,6 @@ sort_params([H|T], Params, Sorted) ->
 encode_body([]) ->
     {[], <<>>};
 encode_body(Body) ->
-    io:format("Body ~p~n", [Body]),
     Headers = [{<<"content-type">>, <<"application/json">>}],
     Payload = jsx:encode(Body),
     {Headers, Payload}.
