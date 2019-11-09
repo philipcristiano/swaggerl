@@ -187,25 +187,38 @@ decode_data(Data, State=#state{}) ->
 create_ops_map(Spec) ->
     OpsMap0 = maps:new(),
     Paths = maps:get(<<"paths">>, Spec, #{}),
-    {_, OpsMap1} = maps:fold(fun add_paths_to_ops_map/3, OpsMap0, Paths),
+    {_, _, OpsMap1} = maps:fold(fun add_paths_to_ops_map/3, OpsMap0, Paths),
     OpsMap1.
 
-add_paths_to_ops_map(Path, Data, {_PreviousPath, OpsMap}) ->
+add_paths_to_ops_map(Path, Data, {_PreviousPath, _PreviousPathProps, OpsMap}) ->
     add_paths_to_ops_map(Path, Data, OpsMap);
 add_paths_to_ops_map(Path, Data, OpsMap) ->
-    maps:fold(fun add_path_op_to_ops_map/3, {Path, OpsMap}, Data).
+    PathItemParams = maps:get(<<"parameters">>, Data, []),
+    PathProperties = #{parameters => PathItemParams},
+    maps:fold(fun add_path_op_to_ops_map/3,
+              {Path, PathProperties, OpsMap},
+              Data).
 
-add_path_op_to_ops_map(Method, [Data], {Path, OpsMap}) ->
-    add_path_op_to_ops_map(Method, Data, {Path, OpsMap});
-add_path_op_to_ops_map(Method, Data, {Path, OpsMap}) when is_map(Data)->
+add_path_op_to_ops_map(Method, [Data], {Path, PathProperties, OpsMap}) ->
+    add_path_op_to_ops_map(Method, Data, {Path, PathProperties, OpsMap});
+add_path_op_to_ops_map(Method, Data,
+                       {Path, PathProperties, OpsMap}) when is_map(Data)->
+    PathItemParams = maps:get(parameters, PathProperties),
     case maps:is_key(<<"operationId">>, Data) of
-        false -> {Path, OpsMap};
+        false -> {Path, PathProperties, OpsMap};
         true  -> Op = maps:get(<<"operationId">>, Data),
-                 NewOpsMap = maps:put(Op, {Path, Method, Data}, OpsMap),
-                 {Path, NewOpsMap}
+
+                 % Combine path item params and the op params
+                 OpParams = maps:get(<<"parameters">>, Data, []),
+                 NewData = maps:put(<<"parameters">>,
+                                    OpParams ++ PathItemParams,
+                                    Data),
+                 NewOpsMap = maps:put(Op, {Path, Method, NewData}, OpsMap),
+
+                 {Path, PathProperties, NewOpsMap}
     end;
-add_path_op_to_ops_map(_Method, _Data, {Path, OpsMap}) ->
-    {Path, OpsMap}.
+add_path_op_to_ops_map(_Method, _Data, {Path, PathProperties, OpsMap}) ->
+    {Path, PathProperties, OpsMap}.
 
 method(<<"get">>) ->
     get;
