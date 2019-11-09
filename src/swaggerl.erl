@@ -44,15 +44,16 @@ op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
     RequestDetails = request_details(Server, Op, OpsMap, Params),
     case RequestDetails of
         {error, Reason, Info} -> {error, Reason, Info};
-        {Method, Path, Payload} ->
+        {Method, Path, PayloadHeaders, Payload} ->
             Headers = proplists:get_value(default_headers,
                                           HTTPOptions,
                                           []),
+            RequestHeaders = Headers ++ PayloadHeaders,
             NonSwaggerlHTTPOptions = proplists:delete(default_headers,
                                                       HTTPOptions),
             CombinedHTTPOptions = NonSwaggerlHTTPOptions ++ ExtraHTTPOps,
             {ok, _Code, _Headers, ReqRef} = hackney:request(
-                Method, Path, Headers, Payload, CombinedHTTPOptions),
+                Method, Path, RequestHeaders, Payload, CombinedHTTPOptions),
             {ok, Body} = hackney:body(ReqRef),
             Data = jsx:decode(Body, [return_maps]),
             Data
@@ -66,14 +67,15 @@ async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
     RequestDetails = request_details(Server, Op, OpsMap, Params),
     case RequestDetails of
         {error, Reason, Info} -> {error, Reason, Info};
-        {Method, Path, Payload} ->
+        {Method, Path, PayloadHeaders, Payload} ->
           Headers = proplists:get_value(default_headers, HTTPOptions, []),
+          RequestHeaders = Headers ++ PayloadHeaders,
           NonSwaggerlHTTPOptions = proplists:delete(
               default_headers, HTTPOptions),
           Options = [{recv_timeout, infinity},
                       async] ++ NonSwaggerlHTTPOptions,
           {ok, RequestId} = hackney:request(
-              Method, Path, Headers, Payload, Options),
+              Method, Path, RequestHeaders, Payload, Options),
           Callback = fun(Msg) ->
               async_read(S, RequestId, Msg) end,
 
@@ -108,10 +110,10 @@ request_details(Server, Op, OpsMap, InParams) ->
                             FullPath, QueryParams),
 
                         BodyParam = maps:get(body, SortedParams, []),
-                        Payload = encode_body(BodyParam),
+                        {Headers, Payload} = encode_body(BodyParam),
 
                         AMethod = method(Method),
-                        {AMethod, PathWithQueryParams, Payload}
+                        {AMethod, PathWithQueryParams, Headers, Payload}
     end.
 
 sort_params([], _Params, Sorted) ->
@@ -131,10 +133,12 @@ sort_params([H|T], Params, Sorted) ->
     end.
 
 encode_body([]) ->
-    <<>>;
+    {[], <<>>};
 encode_body(Body) ->
     io:format("Body ~p~n", [Body]),
-    jsx:encode(Body).
+    Headers = [{<<"content-type">>, <<"application/json">>}],
+    Payload = jsx:encode(Body),
+    {Headers, Payload}.
 
 
 in_type(<<"path">>) ->

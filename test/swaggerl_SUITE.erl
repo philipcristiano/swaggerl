@@ -223,7 +223,7 @@ ga_post_operation(Config) ->
                                            _FunHTTPOptions) ->
         ?assertEqual(post, Method),
         ?assertEqual(URL, "http://localhost/pets"),
-        ?assertEqual([], RequestHeaders),
+        ?assertEqual([{<<"content-type">>, <<"application/json">>}], RequestHeaders),
         ?assertEqual(<<"{\"pet\":{\"foo\":\"bar\"}}">>, Body),
         Result
     end),
