@@ -17,13 +17,15 @@ groups() -> [{test_swaggerl,
               ba_simple_get_operation,
               bb_get_operation_with_http_options,
               bc_list_operation_with_query_string,
+              bd_list_operation_with_path_item_param,
               ca_list_operations,
               da_async_get_operation,
               ea_load_with_http_headers,
               eb_get_with_http_headers,
               ec_async_get_with_http_headers,
               fa_get_without_required_param,
-              fb_async_get_without_required_param
+              fb_async_get_without_required_param,
+              ga_post_operation
               ]}].
 
 
@@ -102,6 +104,27 @@ bc_list_operation_with_query_string(Config) ->
     true = meck:validate(hackney),
     ?assertEqual(#{}, Resp),
     ok.
+
+bd_list_operation_with_path_item_param(Config) ->
+    Conf0 = load_pet_fixture(Config),
+    Result = hackney_response([{body, {ok, jsx:encode(#{})}}]),
+
+    ok = meck:expect(hackney, request, fun(get,
+                                           URL,
+                                           RequestHeaders,
+                                           Body,
+                                           _FunHTTPOptions) ->
+        ?assertEqual("http://localhost/pets?pathLimit=6", URL),
+        ?assertEqual([], RequestHeaders),
+        ?assertEqual(<<>>, Body),
+        Result
+    end),
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    Resp = ?MUT:op(Conf1, <<"findPets">>, [{"pathLimit", "6"}]),
+    true = meck:validate(hackney),
+    ?assertEqual(#{}, Resp),
+    ok.
+
 
 ca_list_operations(Config) ->
     Conf = load_pet_fixture(Config),
@@ -209,6 +232,27 @@ fb_async_get_without_required_param(Config) ->
     Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
     Resp = ?MUT:async_op(Conf1, <<"find pet by id">>, []),
     ?assertEqual({error, missing_required_field, <<"id">>}, Resp),
+    ok.
+
+ga_post_operation(Config) ->
+    Conf0 = load_pet_fixture(Config),
+    Result = hackney_response([{body, {ok, jsx:encode(#{})}}]),
+
+    ok = meck:expect(hackney, request, fun(Method,
+                                           URL,
+                                           RequestHeaders,
+                                           Body,
+                                           _FunHTTPOptions) ->
+        ?assertEqual(post, Method),
+        ?assertEqual(URL, "http://localhost/pets"),
+        ?assertEqual([{<<"content-type">>, <<"application/json">>}], RequestHeaders),
+        ?assertEqual(<<"{\"foo\":\"bar\"}">>, Body),
+        Result
+    end),
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    Resp = ?MUT:op(Conf1, <<"addPet">>, [{"pet", [{foo, bar}]}]),
+    true = meck:validate(hackney),
+    ?assertEqual(#{}, Resp),
     ok.
 
 hackney_response(Result) ->

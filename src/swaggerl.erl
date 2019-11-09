@@ -44,15 +44,16 @@ op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
     RequestDetails = request_details(Server, Op, OpsMap, Params),
     case RequestDetails of
         {error, Reason, Info} -> {error, Reason, Info};
-        {Method, Path, Payload} ->
+        {Method, Path, PayloadHeaders, Payload} ->
             Headers = proplists:get_value(default_headers,
                                           HTTPOptions,
                                           []),
+            RequestHeaders = Headers ++ PayloadHeaders,
             NonSwaggerlHTTPOptions = proplists:delete(default_headers,
                                                       HTTPOptions),
             CombinedHTTPOptions = NonSwaggerlHTTPOptions ++ ExtraHTTPOps,
             {ok, _Code, _Headers, ReqRef} = hackney:request(
-                Method, Path, Headers, Payload, CombinedHTTPOptions),
+                Method, Path, RequestHeaders, Payload, CombinedHTTPOptions),
             {ok, Body} = hackney:body(ReqRef),
             Data = jsx:decode(Body, [return_maps]),
             Data
@@ -66,14 +67,15 @@ async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
     RequestDetails = request_details(Server, Op, OpsMap, Params),
     case RequestDetails of
         {error, Reason, Info} -> {error, Reason, Info};
-        {Method, Path, Payload} ->
+        {Method, Path, PayloadHeaders, Payload} ->
           Headers = proplists:get_value(default_headers, HTTPOptions, []),
+          RequestHeaders = Headers ++ PayloadHeaders,
           NonSwaggerlHTTPOptions = proplists:delete(
               default_headers, HTTPOptions),
           Options = [{recv_timeout, infinity},
                       async] ++ NonSwaggerlHTTPOptions,
           {ok, RequestId} = hackney:request(
-              Method, Path, Headers, Payload, Options),
+              Method, Path, RequestHeaders, Payload, Options),
           Callback = fun(Msg) ->
               async_read(S, RequestId, Msg) end,
 
@@ -93,8 +95,10 @@ set_server(State=#state{}, Server) ->
 request_details(Server, Op, OpsMap, InParams) ->
     {Path, Method, OpSpec} = maps:get(Op, OpsMap),
     Params = normalize_param_names(InParams),
-    ParamSpecs = maps:get(<<"parameters">>, OpSpec),
+    % TODO: Need to test for lack of parameters in the op
+    ParamSpecs = maps:get(<<"parameters">>, OpSpec, []),
     SortedParams = sort_params(ParamSpecs, Params, #{}),
+
     case SortedParams of
         {error, Reason, Info} -> {error, Reason, Info};
         SortedParams -> PathParams = maps:get(path, SortedParams, []),
@@ -106,8 +110,11 @@ request_details(Server, Op, OpsMap, InParams) ->
                         PathWithQueryParams = add_query_params(
                             FullPath, QueryParams),
 
+                        BodyParam = maps:get(body, SortedParams, []),
+                        {Headers, Payload} = encode_body(BodyParam),
+
                         AMethod = method(Method),
-                        {AMethod, PathWithQueryParams, <<>>}
+                        {AMethod, PathWithQueryParams, Headers, Payload}
     end.
 
 sort_params([], _Params, Sorted) ->
@@ -126,11 +133,21 @@ sort_params([H|T], Params, Sorted) ->
                    sort_params(T, Params, NewSorted)
     end.
 
+encode_body([]) ->
+    {[], <<>>};
+encode_body([{_Key, Body}]) ->
+    Headers = [{<<"content-type">>, <<"application/json">>}],
+    Payload = jsx:encode(Body),
+    {Headers, Payload}.
+
 
 in_type(<<"path">>) ->
     path;
 in_type(<<"query">>) ->
-    query.
+    query;
+in_type(<<"body">>) ->
+    body.
+
 
 add_sort_param_to_proplist(false, _, undefined, Sort) ->
     Sort;
@@ -170,28 +187,43 @@ decode_data(Data, State=#state{}) ->
 create_ops_map(Spec) ->
     OpsMap0 = maps:new(),
     Paths = maps:get(<<"paths">>, Spec, #{}),
-    {_, OpsMap1} = maps:fold(fun add_paths_to_ops_map/3, OpsMap0, Paths),
+    {_, _, OpsMap1} = maps:fold(fun add_paths_to_ops_map/3, OpsMap0, Paths),
     OpsMap1.
 
-add_paths_to_ops_map(Path, Data, {_PreviousPath, OpsMap}) ->
+add_paths_to_ops_map(Path, Data, {_PreviousPath, _PreviousPathProps, OpsMap}) ->
     add_paths_to_ops_map(Path, Data, OpsMap);
 add_paths_to_ops_map(Path, Data, OpsMap) ->
-    maps:fold(fun add_path_op_to_ops_map/3, {Path, OpsMap}, Data).
+    PathItemParams = maps:get(<<"parameters">>, Data, []),
+    PathProperties = #{parameters => PathItemParams},
+    maps:fold(fun add_path_op_to_ops_map/3,
+              {Path, PathProperties, OpsMap},
+              Data).
 
-add_path_op_to_ops_map(Method, [Data], {Path, OpsMap}) ->
-    add_path_op_to_ops_map(Method, Data, {Path, OpsMap});
-add_path_op_to_ops_map(Method, Data, {Path, OpsMap}) when is_map(Data)->
+add_path_op_to_ops_map(Method, [Data], {Path, PathProperties, OpsMap}) ->
+    add_path_op_to_ops_map(Method, Data, {Path, PathProperties, OpsMap});
+add_path_op_to_ops_map(Method, Data,
+                       {Path, PathProperties, OpsMap}) when is_map(Data)->
+    PathItemParams = maps:get(parameters, PathProperties),
     case maps:is_key(<<"operationId">>, Data) of
-        false -> {Path, OpsMap};
+        false -> {Path, PathProperties, OpsMap};
         true  -> Op = maps:get(<<"operationId">>, Data),
-                 NewOpsMap = maps:put(Op, {Path, Method, Data}, OpsMap),
-                 {Path, NewOpsMap}
+
+                 % Combine path item params and the op params
+                 OpParams = maps:get(<<"parameters">>, Data, []),
+                 NewData = maps:put(<<"parameters">>,
+                                    OpParams ++ PathItemParams,
+                                    Data),
+                 NewOpsMap = maps:put(Op, {Path, Method, NewData}, OpsMap),
+
+                 {Path, PathProperties, NewOpsMap}
     end;
-add_path_op_to_ops_map(_Method, _Data, {Path, OpsMap}) ->
-    {Path, OpsMap}.
+add_path_op_to_ops_map(_Method, _Data, {Path, PathProperties, OpsMap}) ->
+    {Path, PathProperties, OpsMap}.
 
 method(<<"get">>) ->
-    get.
+    get;
+method(<<"post">>) ->
+    post.
 
 replace_path(Path, []) ->
     Path;
