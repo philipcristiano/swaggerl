@@ -135,7 +135,7 @@ sort_params([H|T], Params, Sorted) ->
 
 encode_body([]) ->
     {[], <<>>};
-encode_body(Body) ->
+encode_body([{_Key, Body}]) ->
     Headers = [{<<"content-type">>, <<"application/json">>}],
     Payload = jsx:encode(Body),
     {Headers, Payload}.

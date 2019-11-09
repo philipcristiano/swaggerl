@@ -246,7 +246,7 @@ ga_post_operation(Config) ->
         ?assertEqual(post, Method),
         ?assertEqual(URL, "http://localhost/pets"),
         ?assertEqual([{<<"content-type">>, <<"application/json">>}], RequestHeaders),
-        ?assertEqual(<<"{\"pet\":{\"foo\":\"bar\"}}">>, Body),
+        ?assertEqual(<<"{\"foo\":\"bar\"}">>, Body),
         Result
     end),
     Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
