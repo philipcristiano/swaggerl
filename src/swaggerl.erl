@@ -11,6 +11,8 @@
          set_server/2
          ]).
 
+-export_type([swaggerl_api/0]).
+
 -record(state, {spec,
                 ops_map,
                 server,
@@ -20,16 +22,22 @@
 
 %%% API
 
-load(Path) ->
+-opaque swaggerl_api() :: #state{spec::map()}.
+
+
+-spec load(list()) -> swaggerl_api().
+load(Path) when is_list(Path)->
     load(Path, []).
 
-load(Path, HTTPOptions) ->
+-spec load(list(), list()) -> swaggerl_api().
+load(Path, HTTPOptions) when is_list(Path) and is_list(HTTPOptions)->
     Data = case Path of
         [$h, $t, $t, $p | _Rest] = Path -> load_http(Path, HTTPOptions);
         _ -> load_file(Path)
     end,
     decode_data(Data, #state{httpoptions=HTTPOptions}).
 
+-spec op(swaggerl_api(), binary() | list(), list()) -> any().
 op(S=#state{}, Op, Params) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
     op(S, BOp, Params, []);
@@ -59,6 +67,7 @@ op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
             Data
     end.
 
+-spec async_op(swaggerl_api(), binary() | list(), list()) -> any().
 async_op(S=#state{}, Op, Params) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
     async_op(S, BOp, Params);
@@ -82,11 +91,13 @@ async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
           Callback
     end.
 
+-spec operations(swaggerl:swaggerl_api()) -> [[byte()]].
 operations(#state{ops_map=OpsMap}) ->
     Keys = maps:keys(OpsMap),
     ListKeys = list_of_bins_to_list_of_lists(Keys),
     ListKeys.
 
+-spec set_server(swaggerl:swaggerl_api(), list()) -> swaggerl:swaggerl_api().
 set_server(State=#state{}, Server) ->
     State#state{server=Server}.
 
@@ -133,6 +144,7 @@ sort_params([H|T], Params, Sorted) ->
                    sort_params(T, Params, NewSorted)
     end.
 
+-spec encode_body(list()) -> {list(), binary()}.
 encode_body([]) ->
     {[], <<>>};
 encode_body([{_Key, Body}]) ->
@@ -140,7 +152,7 @@ encode_body([{_Key, Body}]) ->
     Payload = jsx:encode(Body),
     {Headers, Payload}.
 
-
+-spec in_type(binary()) -> atom().
 in_type(<<"path">>) ->
     path;
 in_type(<<"query">>) ->
