@@ -95,7 +95,8 @@ set_server(State=#state{}, Server) ->
 request_details(Server, Op, OpsMap, InParams) ->
     {Path, Method, OpSpec} = maps:get(Op, OpsMap),
     Params = normalize_param_names(InParams),
-    ParamSpecs = maps:get(<<"parameters">>, OpSpec),
+    % TODO: Need to test for lack of parameters in the op
+    ParamSpecs = maps:get(<<"parameters">>, OpSpec, []),
     SortedParams = sort_params(ParamSpecs, Params, #{}),
 
     case SortedParams of
