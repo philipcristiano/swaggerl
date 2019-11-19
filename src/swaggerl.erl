@@ -1,5 +1,4 @@
 -module(swaggerl).
-
 -include_lib("kernel/include/logger.hrl").
 
 -export([load/1,
@@ -35,6 +34,7 @@ load(Path, HTTPOptions) when is_list(Path) and is_list(HTTPOptions)->
         [$h, $t, $t, $p | _Rest] = Path -> load_http(Path, HTTPOptions);
         _ -> load_file(Path)
     end,
+    ?LOG_DEBUG(#{msg=>"Loaded config"}),
     decode_data(Data, #state{httpoptions=HTTPOptions}).
 
 -spec op(swaggerl_api(), binary() | list(), list()) -> any().
@@ -180,6 +180,8 @@ load_file(Path) ->
     Data.
 
 load_http(Path, HTTPOptions) ->
+
+    ?LOG_DEBUG(#{msg=>"Loading HTTP Config"}),
     Headers = proplists:get_value(default_headers, HTTPOptions, []),
     NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
 
@@ -187,7 +189,9 @@ load_http(Path, HTTPOptions) ->
     ReturnBody = case Resp of
         {ok, _Code, _Headers, ReqRef} -> {ok, Body} = hackney:body(ReqRef),
                                          Body;
-        Else -> {error, Else}
+        Else -> ?LOG_ERROR(#{msg=>"Error requesting swagger config",
+                             error=>Else}),
+                {error, Else}
     end,
     ReturnBody.
 
