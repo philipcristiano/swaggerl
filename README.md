@@ -67,3 +67,10 @@ swaggerl:load("http://petstore.swagger.io/v2/swagger.json", [{default_headers, [
 ## Errors
 
 Errors for operations not matching the API specification will be returned from `op` and `async_op` in the form of `{error, Reason, Info}`
+
+## Reducing memory
+
+Large Swagger/OpenAPI configurations can take up significant memory. If you
+would like to reduce the size of the `API` object you can pass `[{operations,
+[list of operations]}]`, to the `load` function. This will filter out any
+operations not included in this list, reducing memory.

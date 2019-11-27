@@ -16,6 +16,7 @@
                 ops_map,
                 server,
                 httpoptions=[],
+                swaggerl_options=[],
                 path
 }).
 
@@ -29,13 +30,16 @@ load(Path) when is_list(Path)->
     load(Path, []).
 
 -spec load(list(), list()) -> swaggerl_api().
-load(Path, HTTPOptions) when is_list(Path) and is_list(HTTPOptions)->
+load(Path, Options) when is_list(Path) and is_list(Options)->
+    {SwaggerlOptions, HTTPOptions} = split_options(Options),
     Data = case Path of
         [$h, $t, $t, $p | _Rest] = Path -> load_http(Path, HTTPOptions);
         _ -> load_file(Path)
     end,
     ?LOG_DEBUG(#{msg=>"Loaded config"}),
-    decode_data(Data, #state{httpoptions=HTTPOptions}).
+    decode_data(Data,
+                #state{httpoptions=HTTPOptions,
+                swaggerl_options=SwaggerlOptions}).
 
 -spec op(swaggerl_api(), binary() | list(), list()) -> any().
 op(S=#state{}, Op, Params) when is_list(Op)->
@@ -102,6 +106,12 @@ set_server(State=#state{}, Server) ->
     State#state{server=Server}.
 
 %%% Internal
+
+split_options(Options) ->
+    ReducedOperations = proplists:get_value(operations, Options, all_ops),
+    HTTPOptions = proplists:delete(operations, Options),
+    {[{operations, ReducedOperations}], HTTPOptions}.
+
 
 request_details(Server, Op, OpsMap, InParams) ->
     {Path, Method, OpSpec} = maps:get(Op, OpsMap),
@@ -180,7 +190,6 @@ load_file(Path) ->
     Data.
 
 load_http(Path, HTTPOptions) ->
-
     ?LOG_DEBUG(#{msg=>"Loading HTTP Config"}),
     Headers = proplists:get_value(default_headers, HTTPOptions, []),
     NonSwaggerlHTTPOptions = proplists:delete(default_headers, HTTPOptions),
@@ -195,46 +204,63 @@ load_http(Path, HTTPOptions) ->
     end,
     ReturnBody.
 
-decode_data(Data, State=#state{}) ->
+decode_data(Data, State=#state{swaggerl_options=SwaggerlOptions}) ->
     Spec = jsx:decode(Data, [return_maps]),
-    OpsMap = create_ops_map(Spec),
-    State#state{spec=Spec, ops_map=OpsMap}.
+    Operations = proplists:get_value(operations, SwaggerlOptions),
+    OpsMap = create_ops_map(Spec, Operations),
+    State#state{ops_map=OpsMap}.
 
-create_ops_map(Spec) ->
+create_ops_map(Spec, Operations) ->
     OpsMap0 = maps:new(),
     Paths = maps:get(<<"paths">>, Spec, #{}),
-    {_, _, OpsMap1} = maps:fold(fun add_paths_to_ops_map/3, OpsMap0, Paths),
+    {_, _, _, OpsMap1} = maps:fold(fun add_paths_to_ops_map/3,
+                                   {Operations, OpsMap0},
+                                   Paths),
     OpsMap1.
 
-add_paths_to_ops_map(Path, Data, {_PreviousPath, _PreviousPathProps, OpsMap}) ->
-    add_paths_to_ops_map(Path, Data, OpsMap);
-add_paths_to_ops_map(Path, Data, OpsMap) ->
+add_paths_to_ops_map(Path, Data,
+                     {_PreviousPath, _PreviousPathProps, Operations, OpsMap}) ->
+    add_paths_to_ops_map(Path, Data, {Operations, OpsMap});
+add_paths_to_ops_map(Path, Data, {Operations, OpsMap}) ->
     PathItemParams = maps:get(<<"parameters">>, Data, []),
     PathProperties = #{parameters => PathItemParams},
     maps:fold(fun add_path_op_to_ops_map/3,
-              {Path, PathProperties, OpsMap},
+              {Path, PathProperties, Operations, OpsMap},
               Data).
 
-add_path_op_to_ops_map(Method, [Data], {Path, PathProperties, OpsMap}) ->
-    add_path_op_to_ops_map(Method, Data, {Path, PathProperties, OpsMap});
+add_path_op_to_ops_map(Method, [Data],
+                       {Path, PathProperties, Operations, OpsMap}) ->
+    add_path_op_to_ops_map(Method, Data,
+                          {Path, PathProperties, Operations, OpsMap});
 add_path_op_to_ops_map(Method, Data,
-                       {Path, PathProperties, OpsMap}) when is_map(Data)->
+                       {Path, PathProperties, Operations, OpsMap}
+                       ) when is_map(Data)->
     PathItemParams = maps:get(parameters, PathProperties),
     case maps:is_key(<<"operationId">>, Data) of
-        false -> {Path, PathProperties, OpsMap};
+        false -> {Path, PathProperties, Operations, OpsMap};
         true  -> Op = maps:get(<<"operationId">>, Data),
+                 case include_op(Op, Operations) of
+                   false -> {Path, PathProperties, Operations, OpsMap};
+                   true ->
+                     % Combine path item params and the op params
+                     OpParams = maps:get(<<"parameters">>, Data, []),
+                     NewData = maps:put(<<"parameters">>,
+                                        OpParams ++ PathItemParams,
+                                        Data),
+                     NewOpsMap = maps:put(Op, {Path, Method, NewData}, OpsMap),
 
-                 % Combine path item params and the op params
-                 OpParams = maps:get(<<"parameters">>, Data, []),
-                 NewData = maps:put(<<"parameters">>,
-                                    OpParams ++ PathItemParams,
-                                    Data),
-                 NewOpsMap = maps:put(Op, {Path, Method, NewData}, OpsMap),
-
-                 {Path, PathProperties, NewOpsMap}
+                     {Path, PathProperties, Operations, NewOpsMap}
+                end
     end;
-add_path_op_to_ops_map(_Method, _Data, {Path, PathProperties, OpsMap}) ->
-    {Path, PathProperties, OpsMap}.
+add_path_op_to_ops_map(_Method, _Data,
+                       {Path, PathProperties, Operations, OpsMap}) ->
+    {Path, PathProperties, Operations, OpsMap}.
+
+% Filter out the right operations
+include_op(_Op, all_ops) ->
+    true;
+include_op(Op, Operations) ->
+    lists:member(Op, Operations).
 
 method(<<"get">>) ->
     get;
