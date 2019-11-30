@@ -22,7 +22,7 @@
 
 %%% API
 
--opaque swaggerl_api() :: #state{spec::map()}.
+-opaque swaggerl_api() :: #state{}.
 
 
 -spec load(list()) -> swaggerl_api().
@@ -204,6 +204,7 @@ load_http(Path, HTTPOptions) ->
     end,
     ReturnBody.
 
+-spec decode_data(any(), swaggerl_api()) -> swaggerl_api().
 decode_data(Data, State=#state{swaggerl_options=SwaggerlOptions}) ->
     Spec = jsx:decode(Data, [return_maps]),
     Operations = proplists:get_value(operations, SwaggerlOptions),
