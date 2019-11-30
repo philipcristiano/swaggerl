@@ -19,6 +19,7 @@ groups() -> [{test_swaggerl,
               bc_list_operation_with_query_string,
               bd_list_operation_with_path_item_param,
               ca_list_operations,
+              cb_list_reduced_operations,
               da_async_get_operation,
               ea_load_with_http_headers,
               eb_get_with_http_headers,
@@ -100,7 +101,7 @@ bc_list_operation_with_query_string(Config) ->
         Result
     end),
     Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
-    Resp = ?MUT:op(Conf1, <<"findPets">>, [{"limit", "5"}]),
+    Resp = ?MUT:op(Conf1, "findPets", [{"limit", "5"}]),
     true = meck:validate(hackney),
     ?assertEqual(#{}, Resp),
     ok.
@@ -130,6 +131,14 @@ ca_list_operations(Config) ->
     Conf = load_pet_fixture(Config),
     Resp = ?MUT:operations(Conf),
     ?assertEqual(pet_operations(), Resp),
+    ok.
+
+cb_list_reduced_operations(Config) ->
+    ReducedOperations = [<<"findPets">>],
+    Options = [{operations, ReducedOperations}],
+    Conf = load_pet_fixture(Config, Options),
+    Resp = ?MUT:operations(Conf),
+    ?assertEqual(["findPets"], Resp),
     ok.
 
 da_async_get_operation(Config) ->
