@@ -48,11 +48,11 @@ op(S=#state{}, Op, Params) when is_list(Op)->
 op(S=#state{}, Op, Params) ->
     op(S, Op, Params, []).
 
-op(S=#state{}, Op, Params, ExtraHTTPOps) when is_list(Op)->
+op(S=#state{}, Op, Params, ExtraOps) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
-    op(S, BOp, Params, ExtraHTTPOps);
+    op(S, BOp, Params, ExtraOps);
 op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
-        Op, Params, ExtraHTTPOps) ->
+        Op, Params, ExtraOps) ->
     RequestDetails = request_details(Server, Op, OpsMap, Params),
     case RequestDetails of
         {error, Reason, Info} -> {error, Reason, Info};
@@ -63,6 +63,7 @@ op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
             RequestHeaders = Headers ++ PayloadHeaders,
             NonSwaggerlHTTPOptions = proplists:delete(default_headers,
                                                       HTTPOptions),
+            ExtraHTTPOps = proplists:get_value(http_options, ExtraOps, []),
             CombinedHTTPOptions = NonSwaggerlHTTPOptions ++ ExtraHTTPOps,
             {ok, _Code, _Headers, ReqRef} = hackney:request(
                 Method, Path, RequestHeaders, Payload, CombinedHTTPOptions),
