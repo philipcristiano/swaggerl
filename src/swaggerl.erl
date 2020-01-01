@@ -128,7 +128,8 @@ request_details(Server, Op, OpsMap, InParams) ->
         FullPath, QueryParams),
 
     BodyParam = maps:get(body, SortedParams, []),
-    {Headers, Payload} = encode_body(BodyParam),
+    BodyHeader = <<"application/json">>,
+    {Headers, Payload} = encode_body(BodyParam, BodyHeader, fun jsx:encode/1),
 
     AMethod = method(Method),
     {AMethod, PathWithQueryParams, Headers, Payload}.
@@ -149,12 +150,12 @@ sort_params([H|T], Params, Sorted) ->
                    sort_params(T, Params, NewSorted)
     end.
 
--spec encode_body(list()) -> {list(), binary()}.
-encode_body([]) ->
+-spec encode_body(list(), binary(), fun(() -> binary())) -> {list(), binary()}.
+encode_body([], _ContentTypeHeader, _EncodeFun) ->
     {[], <<>>};
-encode_body([{_Key, Body}]) ->
-    Headers = [{<<"content-type">>, <<"application/json">>}],
-    Payload = jsx:encode(Body),
+encode_body([{_Key, Body}], ContentTypeHeader, EncodeFun) ->
+    Headers = [{<<"content-type">>, ContentTypeHeader}],
+    Payload = EncodeFun(Body),
     {Headers, Payload}.
 
 -spec in_type(binary()) -> atom().
