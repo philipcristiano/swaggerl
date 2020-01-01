@@ -82,7 +82,7 @@ async_op(S=#state{}, Op, Params, ExtraOps) ->
 op_to_request(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
             Op, Params, ExtraOps, InternalHTTPOps) ->
     {Method, Path, PayloadHeaders, Payload} = request_details(
-        Server, Op, OpsMap, Params),
+        Server, Op, OpsMap, Params, ExtraOps),
     Headers = proplists:get_value(default_headers,
                                   HTTPOptions,
                                   []),
@@ -112,7 +112,7 @@ split_options(Options) ->
     {[{operations, ReducedOperations}], HTTPOptions}.
 
 
-request_details(Server, Op, OpsMap, InParams) ->
+request_details(Server, Op, OpsMap, InParams, ExtraOps) ->
     {Path, Method, OpSpec} = maps:get(Op, OpsMap),
     Params = normalize_param_names(InParams),
     % TODO: Need to test for lack of parameters in the op
@@ -128,7 +128,8 @@ request_details(Server, Op, OpsMap, InParams) ->
         FullPath, QueryParams),
 
     BodyParam = maps:get(body, SortedParams, []),
-    BodyHeader = <<"application/json">>,
+    BodyHeader = proplists:get_value(
+        content_type, ExtraOps, <<"application/json">>),
     {Headers, Payload} = encode_body(BodyParam, BodyHeader, fun jsx:encode/1),
 
     AMethod = method(Method),
@@ -150,7 +151,7 @@ sort_params([H|T], Params, Sorted) ->
                    sort_params(T, Params, NewSorted)
     end.
 
--spec encode_body(list(), binary(), fun(() -> binary())) -> {list(), binary()}.
+-spec encode_body(list(), binary(), fun((_) -> binary())) -> {list(), binary()}.
 encode_body([], _ContentTypeHeader, _EncodeFun) ->
     {[], <<>>};
 encode_body([{_Key, Body}], ContentTypeHeader, EncodeFun) ->
