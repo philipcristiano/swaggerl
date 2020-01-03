@@ -262,6 +262,8 @@ include_op(Op, Operations) ->
 
 method(<<"get">>) ->
     get;
+method(<<"patch">>) ->
+    patch;
 method(<<"post">>) ->
     post.
 
