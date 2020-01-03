@@ -6,6 +6,7 @@
          op/3,
          op/4,
          async_op/3,
+         async_op/4,
          operations/1,
          set_server/2
          ]).
@@ -48,52 +49,50 @@ op(S=#state{}, Op, Params) when is_list(Op)->
 op(S=#state{}, Op, Params) ->
     op(S, Op, Params, []).
 
-op(S=#state{}, Op, Params, ExtraHTTPOps) when is_list(Op)->
+op(S=#state{}, Op, Params, ExtraOps) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
-    op(S, BOp, Params, ExtraHTTPOps);
-op(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
-        Op, Params, ExtraHTTPOps) ->
-    RequestDetails = request_details(Server, Op, OpsMap, Params),
-    case RequestDetails of
-        {error, Reason, Info} -> {error, Reason, Info};
-        {Method, Path, PayloadHeaders, Payload} ->
-            Headers = proplists:get_value(default_headers,
-                                          HTTPOptions,
-                                          []),
-            RequestHeaders = Headers ++ PayloadHeaders,
-            NonSwaggerlHTTPOptions = proplists:delete(default_headers,
-                                                      HTTPOptions),
-            CombinedHTTPOptions = NonSwaggerlHTTPOptions ++ ExtraHTTPOps,
-            {ok, _Code, _Headers, ReqRef} = hackney:request(
-                Method, Path, RequestHeaders, Payload, CombinedHTTPOptions),
+    op(S, BOp, Params, ExtraOps);
+op(S=#state{}, Op, Params, ExtraOps) ->
+    try op_to_request(S, Op, Params, ExtraOps, []) of
+        {ok, _Code, _Headers, ReqRef} ->
             {ok, Body} = hackney:body(ReqRef),
             Data = jsx:decode(Body, [return_maps]),
             Data
+    catch
+        Throw -> Throw
     end.
 
 -spec async_op(swaggerl_api(), binary() | list(), list()) -> any().
 async_op(S=#state{}, Op, Params) when is_list(Op)->
     BOp = binary:list_to_bin(Op),
-    async_op(S, BOp, Params);
-async_op(S=#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
-            Op, Params) ->
-    RequestDetails = request_details(Server, Op, OpsMap, Params),
-    case RequestDetails of
-        {error, Reason, Info} -> {error, Reason, Info};
-        {Method, Path, PayloadHeaders, Payload} ->
-          Headers = proplists:get_value(default_headers, HTTPOptions, []),
-          RequestHeaders = Headers ++ PayloadHeaders,
-          NonSwaggerlHTTPOptions = proplists:delete(
-              default_headers, HTTPOptions),
-          Options = [{recv_timeout, infinity},
-                      async] ++ NonSwaggerlHTTPOptions,
-          {ok, RequestId} = hackney:request(
-              Method, Path, RequestHeaders, Payload, Options),
-          Callback = fun(Msg) ->
-              async_read(S, RequestId, Msg) end,
+    async_op(S, BOp, Params, []);
+async_op(S=#state{}, Op, Params) ->
+    async_op(S, Op, Params, []).
 
-          Callback
+async_op(S=#state{}, Op, Params, ExtraOps) ->
+    AsyncOps = [{recv_timeout, infinity}, async],
+    try op_to_request(S, Op, Params, ExtraOps, AsyncOps) of
+          {ok, RequestId} -> Callback = fun(Msg) ->
+                                async_read(S, RequestId, Msg) end,
+                             Callback
+    catch
+        Throw -> Throw
     end.
+
+op_to_request(#state{ops_map=OpsMap, server=Server, httpoptions=HTTPOptions},
+            Op, Params, ExtraOps, InternalHTTPOps) ->
+    {Method, Path, PayloadHeaders, Payload} = request_details(
+        Server, Op, OpsMap, Params, ExtraOps),
+    Headers = proplists:get_value(default_headers,
+                                  HTTPOptions,
+                                  []),
+    RequestHeaders = Headers ++ PayloadHeaders,
+    NonSwaggerlHTTPOptions = proplists:delete(default_headers,
+                                              HTTPOptions),
+    ExtraHTTPOps = proplists:get_value(http_options, ExtraOps, []),
+    AllHTTPOps = NonSwaggerlHTTPOptions ++ ExtraHTTPOps ++ InternalHTTPOps,
+    hackney:request(Method, Path, RequestHeaders, Payload, AllHTTPOps).
+
 
 -spec operations(swaggerl:swaggerl_api()) -> [[byte()]].
 operations(#state{ops_map=OpsMap}) ->
@@ -113,30 +112,28 @@ split_options(Options) ->
     {[{operations, ReducedOperations}], HTTPOptions}.
 
 
-request_details(Server, Op, OpsMap, InParams) ->
+request_details(Server, Op, OpsMap, InParams, ExtraOps) ->
     {Path, Method, OpSpec} = maps:get(Op, OpsMap),
     Params = normalize_param_names(InParams),
     % TODO: Need to test for lack of parameters in the op
     ParamSpecs = maps:get(<<"parameters">>, OpSpec, []),
     SortedParams = sort_params(ParamSpecs, Params, #{}),
+    PathParams = maps:get(path, SortedParams, []),
+    ReplacedPath = binary:bin_to_list(
+        replace_path(Path, PathParams)),
+    FullPath = Server ++ ReplacedPath,
 
-    case SortedParams of
-        {error, Reason, Info} -> {error, Reason, Info};
-        SortedParams -> PathParams = maps:get(path, SortedParams, []),
-                        ReplacedPath = binary:bin_to_list(
-                            replace_path(Path, PathParams)),
-                        FullPath = Server ++ ReplacedPath,
+    QueryParams = maps:get(query, SortedParams, []),
+    PathWithQueryParams = add_query_params(
+        FullPath, QueryParams),
 
-                        QueryParams = maps:get(query, SortedParams, []),
-                        PathWithQueryParams = add_query_params(
-                            FullPath, QueryParams),
+    BodyParam = maps:get(body, SortedParams, []),
+    BodyHeader = proplists:get_value(
+        content_type, ExtraOps, <<"application/json">>),
+    {Headers, Payload} = encode_body(BodyParam, BodyHeader, fun jsx:encode/1),
 
-                        BodyParam = maps:get(body, SortedParams, []),
-                        {Headers, Payload} = encode_body(BodyParam),
-
-                        AMethod = method(Method),
-                        {AMethod, PathWithQueryParams, Headers, Payload}
-    end.
+    AMethod = method(Method),
+    {AMethod, PathWithQueryParams, Headers, Payload}.
 
 sort_params([], _Params, Sorted) ->
     Sorted;
@@ -154,12 +151,12 @@ sort_params([H|T], Params, Sorted) ->
                    sort_params(T, Params, NewSorted)
     end.
 
--spec encode_body(list()) -> {list(), binary()}.
-encode_body([]) ->
+-spec encode_body(list(), binary(), fun((_) -> binary())) -> {list(), binary()}.
+encode_body([], _ContentTypeHeader, _EncodeFun) ->
     {[], <<>>};
-encode_body([{_Key, Body}]) ->
-    Headers = [{<<"content-type">>, <<"application/json">>}],
-    Payload = jsx:encode(Body),
+encode_body([{_Key, Body}], ContentTypeHeader, EncodeFun) ->
+    Headers = [{<<"content-type">>, ContentTypeHeader}],
+    Payload = EncodeFun(Body),
     {Headers, Payload}.
 
 -spec in_type(binary()) -> atom().
@@ -174,7 +171,7 @@ in_type(<<"body">>) ->
 add_sort_param_to_proplist(false, _, undefined, Sort) ->
     Sort;
 add_sort_param_to_proplist(true, Name, undefined, _Sort) ->
-    {error, missing_required_field, Name};
+    throw({error, missing_required_field, Name});
 add_sort_param_to_proplist(_, Name, Value, Sort) ->
     Sort ++ [{Name, Value}].
 
@@ -265,6 +262,8 @@ include_op(Op, Operations) ->
 
 method(<<"get">>) ->
     get;
+method(<<"patch">>) ->
+    patch;
 method(<<"post">>) ->
     post.
 

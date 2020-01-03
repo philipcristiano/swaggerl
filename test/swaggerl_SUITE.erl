@@ -26,7 +26,8 @@ groups() -> [{test_swaggerl,
               ec_async_get_with_http_headers,
               fa_get_without_required_param,
               fb_async_get_without_required_param,
-              ga_post_operation
+              ga_post_operation,
+              gb_post_operation_with_alt_content_type
               ]}].
 
 
@@ -260,6 +261,28 @@ ga_post_operation(Config) ->
     end),
     Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
     Resp = ?MUT:op(Conf1, <<"addPet">>, [{"pet", [{foo, bar}]}]),
+    true = meck:validate(hackney),
+    ?assertEqual(#{}, Resp),
+    ok.
+
+gb_post_operation_with_alt_content_type(Config) ->
+    Conf0 = load_pet_fixture(Config),
+    Result = hackney_response([{body, {ok, jsx:encode(#{})}}]),
+    ContentType = <<"application/json+test">>,
+    ok = meck:expect(hackney, request, fun(Method,
+                                           URL,
+                                           RequestHeaders,
+                                           Body,
+                                           _FunHTTPOptions) ->
+        ?assertEqual(post, Method),
+        ?assertEqual(URL, "http://localhost/pets"),
+        ?assertEqual([{<<"content-type">>, ContentType}], RequestHeaders),
+        ?assertEqual(<<"{\"foo\":\"bar\"}">>, Body),
+        Result
+    end),
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    ExtraOps = [{content_type, ContentType}],
+    Resp = ?MUT:op(Conf1, <<"addPet">>, [{"pet", [{foo, bar}]}], ExtraOps),
     true = meck:validate(hackney),
     ?assertEqual(#{}, Resp),
     ok.

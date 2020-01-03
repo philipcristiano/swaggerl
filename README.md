@@ -64,6 +64,18 @@ Options -
 swaggerl:load("http://petstore.swagger.io/v2/swagger.json", [{default_headers, [{<<"x-foo">>, <<"foo">>}]}]).
 ```
 
+
+## Extra Options for Swaggerl
+Extra options to configure Swaggerl can be passed through as the 4th argument to `op` and `async_op`. Such as:
+
+```
+swaggerl:op(Spec, Ops, Params, ExtraOptions).
+```
+
+These options include:
+
+- `content_type` (default: `application/json`) - This field is not validated against the API `consumes` spec.
+
 ## Errors
 
 Errors for operations not matching the API specification will be returned from `op` and `async_op` in the form of `{error, Reason, Info}`
