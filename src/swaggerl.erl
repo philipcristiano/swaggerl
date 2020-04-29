@@ -296,9 +296,16 @@ async_read(_S=#state{}, Ref, {hackney_response, Ref, {headers, _Headers}}) ->
 async_read(_S=#state{}, Ref, {hackney_response, Ref, done}) ->
     done;
 async_read(_S=#state{}, Ref, {hackney_response, Ref, Bin}) ->
-    jsx:decode(Bin, [return_maps]);
+    decode_multi_json_docs(Bin);
 async_read(_S, _Ref, _Unknown) ->
     unknown.
+
+
+decode_multi_json_docs(<<>>) ->
+    [];
+decode_multi_json_docs(Bin) ->
+    {with_tail, Term, Rest} = jsx:decode(Bin, [return_maps, return_tail]),
+    [Term | decode_multi_json_docs(Rest)].
 
 normalize_param_names([{Name, Value} | T]) when is_list(Name) ->
     BName = binary:list_to_bin(Name),
