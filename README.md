@@ -25,7 +25,7 @@ Result = swaggerl:op(API, "getPetById", [{"petId", 0}]).
 
 Async operations can be made with `swaggerl:async_op/3`. It has the same
 arguments as `swagger:op/3` but returns a callback that will parse messages
-passed to it.
+passed to it and return a list of data.
 
 ```erlang
 Spec = swaggerl:load("http://petstore.swagger.io/v2/swagger.json").
@@ -47,7 +47,7 @@ after 10000 ->
     error
 end.
 
-Result = Callback(Msg).
+Results = Callback(Msg).
 
 Other HTTP options cannot be passed through yet. There is an `infinity` timeout
 set explicitly for async operations. This will change in the future.

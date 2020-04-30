@@ -21,6 +21,7 @@ groups() -> [{test_swaggerl,
               ca_list_operations,
               cb_list_reduced_operations,
               da_async_get_operation,
+              db_async_get_operation_with_multi_docs,
               ea_load_with_http_headers,
               eb_get_with_http_headers,
               ec_async_get_with_http_headers,
@@ -162,7 +163,33 @@ da_async_get_operation(Config) ->
     Msg = get_msg(),
     Resp = Callback(Msg),
     true = meck:validate(hackney),
-    ?assertEqual(#{}, Resp),
+    ?assertEqual([#{}], Resp),
+    ok.
+
+db_async_get_operation_with_multi_docs(Config) ->
+    Conf0 = load_pet_fixture(Config),
+    Ref = make_ref(),
+    Datum = jsx:encode(#{}),
+    Data = << Datum/binary, <<"\n">>/binary, Datum/binary >>,
+    Result = {hackney_response, Ref, Data},
+    io:format("Data ~p~n", [Data]),
+    ok = meck:expect(hackney, request, fun(get,
+                                           URL,
+                                           Headers,
+                                           <<>>,
+                                           Options) ->
+        ?assertEqual("http://localhost/pets/0", URL),
+        ?assertEqual([], Headers),
+        ?assertEqual([{recv_timeout,infinity}, async], Options),
+        async_http_send(self(), Result),
+        {ok, Ref} end),
+
+    Conf1 = ?MUT:set_server(Conf0, "http://localhost"),
+    Callback = ?MUT:async_op(Conf1, "find pet by id", [{"id", "0"}]),
+    Msg = get_msg(),
+    Resp = Callback(Msg),
+    true = meck:validate(hackney),
+    ?assertEqual([#{}, #{}], Resp),
     ok.
 
 ea_load_with_http_headers(Config) ->
@@ -225,7 +252,7 @@ ec_async_get_with_http_headers(Config) ->
     Msg = get_msg(),
     Resp = Callback(Msg),
     true = meck:validate(hackney),
-    ?assertEqual(#{}, Resp),
+    ?assertEqual([#{}], Resp),
     ok.
 
 fa_get_without_required_param(Config) ->
