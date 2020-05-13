@@ -265,7 +265,9 @@ method(<<"get">>) ->
 method(<<"patch">>) ->
     patch;
 method(<<"post">>) ->
-    post.
+    post;
+method(<<"put">>) ->
+    put.
 
 replace_path(Path, []) ->
     Path;
